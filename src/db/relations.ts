@@ -1,0 +1,49 @@
+import { defineRelations } from "drizzle-orm";
+import * as schema from "./schema";
+
+// drizzle-orm v1 relations API (replaces the old `relations()` helper).
+// This powers the `db.query.*` relational query builder.
+//
+// Every foreign-key relationship in the schema is declared here so it can be
+// traversed with `db.query.<table>.findX({ with: { <relation>: true } })`.
+// `optional: false` marks a required (NOT NULL) owner side so the result type
+// is non-nullable.
+//
+// artist <-> track is many-to-many, resolved through the `artistToTrack`
+// junction table via the v1 `.through()` helper.
+export const relations = defineRelations(schema, (r) => ({
+  user: {
+    tracks: r.many.track({ from: r.user.id, to: r.track.userId }),
+    artists: r.many.artist({ from: r.user.id, to: r.artist.userId }),
+    sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
+  },
+  artist: {
+    owner: r.one.user({
+      from: r.artist.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+    tracks: r.many.track({
+      from: r.artist.id.through(r.artistToTrack.artistId),
+      to: r.track.id.through(r.artistToTrack.trackId),
+    }),
+  },
+  track: {
+    owner: r.one.user({
+      from: r.track.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+    artists: r.many.artist({
+      from: r.track.id.through(r.artistToTrack.trackId),
+      to: r.artist.id.through(r.artistToTrack.artistId),
+    }),
+  },
+  session: {
+    user: r.one.user({
+      from: r.session.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+}));
