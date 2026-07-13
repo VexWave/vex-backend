@@ -7,6 +7,8 @@ import { postTrack } from "./endpoints/postTrack";
 import { deleteTrack } from "./endpoints/deleteTrack";
 import { deleteArtist } from "./endpoints/deleteArtist";
 import { editTrack } from "./endpoints/editTrack";
+import { getTracks } from "./endpoints/getTracks";
+import { getTrackAudio } from "./endpoints/getTrackAudio";
 
 const app = Fastify({
   bodyLimit: 100 * 1024 * 1024,
@@ -21,6 +23,8 @@ const router = s.router(ApiContract, {
   deleteTrack,
   deleteArtist,
   editTrack,
+  getTracks,
+  getTrackAudio,
 });
 
 app.register(s.plugin(router));

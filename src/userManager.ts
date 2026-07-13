@@ -73,6 +73,34 @@ export class UserManager {
     return deleted.length > 0;
   }
 
+  // Tracks in the shape the contract's ServerTrackSchema expects.
+  async listTracks(): Promise<
+    { id: number; title: string; duration: number; artists: string[] }[]
+  > {
+    const rows = await db.query.track.findMany({
+      columns: { id: true, title: true, durationMs: true },
+      where: { userId: this.userId },
+      with: { artists: { columns: { name: true } } },
+      orderBy: { id: "asc" },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      duration: row.durationMs,
+      artists: row.artists.map((a) => a.name),
+    }));
+  }
+
+  // Returns the stored (still compressed) audio bytes, or null when the track
+  // doesn't exist or belongs to another user.
+  async getTrackData(id: number): Promise<Buffer | null> {
+    const row = await db.query.track.findFirst({
+      columns: { compressed_data: true },
+      where: { id, userId: this.userId },
+    });
+    return row?.compressed_data ?? null;
+  }
+
   // --- Artists ---
 
   async createArtist(values: {
