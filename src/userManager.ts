@@ -114,6 +114,22 @@ export class UserManager {
     return created?.id ?? null;
   }
 
+  // Artists in the shape the contract's ArtistSchema expects.
+  async listArtists(): Promise<
+    { id: number; name: string; imageUrl?: string }[]
+  > {
+    const rows = await db.query.artist.findMany({
+      columns: { id: true, name: true, imageUrl: true },
+      where: { userId: this.userId },
+      orderBy: { id: "asc" },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      imageUrl: row.imageUrl ?? undefined,
+    }));
+  }
+
   // Unlinks the artist from its tracks (via ON DELETE CASCADE); the tracks
   // themselves are kept. Returns false when not found or owned by another user.
   async deleteArtist(id: number): Promise<boolean> {
