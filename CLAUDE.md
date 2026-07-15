@@ -28,12 +28,25 @@ For **getting/reading data, use `db.query.<table>.findFirst/findMany`**, not `db
 - Writes (insert/update/delete) still use the core API (`db.insert().values().returning()`); `db.query.*` is read-only.
 - Any table in the schema is queryable via `db.query.*` once passed to `defineRelations(schema, ...)`, even without declared relations — but to traverse with `with`, the relation must exist (see below).
 
+To read a value from a column **without loading its bytes** (e.g. probing whether a large `bytea` is present), add a computed `extras` field instead of selecting the column:
+
+```ts
+db.query.artist.findMany({
+  columns: { id: true, name: true },
+  extras: { hasImage: (t, { sql }) => sql<boolean>`${t.image} is not null` },
+});
+```
+
+`extras` is an **object** of `key -> (table, { sql }) => SQLWrapper` (see `listArtists` in `src/userManager.ts`) — not the single-callback form some drizzle docs show.
+
 ## Don't wrap DB calls in `tryCatch`
 
-**Do not wrap database calls (`db.query.*`, `db.insert()`, etc.) in the `tryCatch` helper.** Call them directly and use the return value.
+**Do not wrap database calls (`db.query.*`, `db.insert()`, etc.) in the `tryCatch` helper.** Call them directly and use the return value. (`tryCatch` lives in `src/utils.ts`.)
 
-## Declare every relationship in `src/db/relations.ts`
+## Contract, endpoints, and data access
 
-**When creating a new database relationship, always add it to `src/db/relations.ts`.** Declare a relation for _every_ relationship that exists in the schema, so it can be traversed from `db.query.*` using `with`.
-
-**Why:** A foreign key in `schema.ts` alone does NOT make the relation navigable in the relational query builder — the relation must be declared in `relations.ts` (via `defineRelations`) for `with: { <relation>: true }` to work.
+- **Contract (`contract/contract.ts`)** is the single source of truth for routes and validation (ts-rest). Schemas are split into two labeled sections: **request bodies** named `*Request` (what clients send) and **response bodies** named `*Response` (what the server returns). Put new schemas in the matching section and follow the naming.
+- **Endpoints** live one-per-file in `src/app/endpoints/<name>.ts` as `AppRouteImplementation<typeof ApiContract.<name>>`, and **must be registered** in the `s.router({...})` call in `src/app/server.ts`.
+- **Auth** resolves the caller with `UserManager.fromToken(headers.authorization)`; `null` means unauthorized → return `{ status: 401, ... }`.
+- **User-scoped data access lives in `UserManager`** (`src/userManager.ts`), whose every query is filtered by `userId` so one user can never read or write another's rows. Writes enforce ownership in the `WHERE` clause itself, not via a separate pre-check.
+- **Public / un-scoped reads do NOT belong in `UserManager`** — put that DB query directly in the endpoint file (see `getArtistImageById` in `src/app/endpoints/getArtistImage.ts`).
