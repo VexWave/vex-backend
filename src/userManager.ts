@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getUserIdFromToken } from "./auth";
 import { db } from "./db";
 import { artist, artistToTrack, track } from "./db/schema";
+import { artistImagePath } from "../contract/contract";
 
 // All user-scoped data access. Every read and write is filtered by the
 // user's id, so a caller can never touch another user's rows.
@@ -49,7 +50,10 @@ export class UserManager {
 
     await db.transaction(async (tx) => {
       if (changes.title !== undefined) {
-        await tx.update(track).set({ title: changes.title }).where(this.ownTrack(id));
+        await tx
+          .update(track)
+          .set({ title: changes.title })
+          .where(this.ownTrack(id));
       }
       if (artistIds !== undefined) {
         // Full replacement of the track's artist links
@@ -73,7 +77,7 @@ export class UserManager {
     return deleted.length > 0;
   }
 
-  // Tracks in the shape the contract's ServerTrackSchema expects.
+  // Tracks in the shape the contract's TrackResponse expects.
   async listTracks(): Promise<
     { id: number; title: string; duration: number; artists: string[] }[]
   > {
@@ -105,7 +109,7 @@ export class UserManager {
 
   async createArtist(values: {
     name: string;
-    imageUrl?: string;
+    image?: Buffer;
   }): Promise<number | null> {
     const [created] = await db
       .insert(artist)
@@ -114,20 +118,48 @@ export class UserManager {
     return created?.id ?? null;
   }
 
-  // Artists in the shape the contract's ArtistSchema expects.
+  // Artists in the shape the contract's ArtistResponse expects. `imageUrl` points
+  // at the getArtistImage route when the artist has an image; the (potentially
+  // large) image bytes are never loaded here — we only probe for their
+  // presence via the `hasImage` extra.
   async listArtists(): Promise<
     { id: number; name: string; imageUrl?: string }[]
   > {
     const rows = await db.query.artist.findMany({
-      columns: { id: true, name: true, imageUrl: true },
+      columns: { id: true, name: true },
+      extras: {
+        hasImage: (t, { sql }) => sql<boolean>`${t.image} is not null`,
+      },
       where: { userId: this.userId },
       orderBy: { id: "asc" },
     });
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
-      imageUrl: row.imageUrl ?? undefined,
+      imageUrl: row.hasImage ? artistImagePath(row.id) : undefined,
     }));
+  }
+
+  // Updates an artist's name and/or avatar image. The ownership filter is part
+  // of the WHERE clause, so another user's artist is treated as not found.
+  async updateArtist(
+    id: number,
+    changes: { name?: string; image?: Buffer },
+  ): Promise<"updated" | "not_found"> {
+    const values: { name?: string; image?: Buffer } = {};
+    if (changes.name !== undefined) {
+      values.name = changes.name;
+    }
+    if (changes.image !== undefined) {
+      values.image = changes.image;
+    }
+
+    const updated = await db
+      .update(artist)
+      .set(values)
+      .where(and(eq(artist.id, id), eq(artist.userId, this.userId)))
+      .returning({ id: artist.id });
+    return updated.length > 0 ? "updated" : "not_found";
   }
 
   // Unlinks the artist from its tracks (via ON DELETE CASCADE); the tracks

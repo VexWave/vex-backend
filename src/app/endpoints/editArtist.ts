@@ -2,19 +2,23 @@ import type { AppRouteImplementation } from "@ts-rest/fastify";
 import { UserManager } from "../../userManager";
 import { ApiContract } from "../../../contract/contract";
 
-export const postArtist: AppRouteImplementation<
-  typeof ApiContract.postArtist
+export const editArtist: AppRouteImplementation<
+  typeof ApiContract.editArtist
 > = async ({ body, headers }) => {
   const user = await UserManager.fromToken(headers.authorization);
   if (user === null) {
     return { status: 401, body: "Unauthorized" };
   }
 
-  const { name, image } = body;
+  const { id, name, image } = body;
 
-  const id = await user.createArtist({ name, image });
-  if (id === null) {
-    return { status: 500, body: "Failed to insert artist" };
+  if (name === undefined && image === undefined) {
+    return { status: 400, body: "Nothing to update" };
+  }
+
+  const result = await user.updateArtist(id, { name, image });
+  if (result === "not_found") {
+    return { status: 404, body: "Artist not found" };
   }
 
   return { status: 200, body: String(id) };

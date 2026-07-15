@@ -10,7 +10,7 @@ import {
 export const artist = pgTable("artist", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
-  imageUrl: text("image_url"),
+  image: bytea("image"),
   userId: integer("user_id")
     .notNull()
     .references(() => user.id),
