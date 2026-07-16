@@ -22,6 +22,7 @@ export const track = pgTable("track", {
   title: text("title").notNull(),
   durationMs: integer("duration_ms").notNull(),
   compressed_data: bytea("data").notNull(),
+  cover: bytea("cover"),
   userId: integer("user_id")
     .notNull()
     .references(() => user.id),

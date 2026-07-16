@@ -11,6 +11,7 @@ import { editArtist } from "./endpoints/editArtist";
 import { getTracks } from "./endpoints/getTracks";
 import { getArtists } from "./endpoints/getArtists";
 import { getArtistImage } from "./endpoints/getArtistImage";
+import { getTrackImage } from "./endpoints/getTrackImage";
 import { getTrackAudio } from "./endpoints/getTrackAudio";
 
 const app = Fastify({
@@ -30,6 +31,7 @@ const router = s.router(ApiContract, {
   getTracks,
   getArtists,
   getArtistImage,
+  getTrackImage,
   getTrackAudio,
 });
 

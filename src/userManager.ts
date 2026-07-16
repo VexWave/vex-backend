@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getUserIdFromToken } from "./auth";
 import { db } from "./db";
 import { artist, artistToTrack, track } from "./db/schema";
-import { artistImagePath } from "../contract/contract";
+import { artistImagePath, trackImagePath } from "../contract/contract";
 
 // All user-scoped data access. Every read and write is filtered by the
 // user's id, so a caller can never touch another user's rows.
@@ -23,12 +23,42 @@ export class UserManager {
     title: string;
     durationMs: number;
     compressed_data: Buffer;
-  }): Promise<number | null> {
-    const [created] = await db
-      .insert(track)
-      .values({ ...values, userId: this.userId })
-      .returning({ id: track.id });
-    return created?.id ?? null;
+    cover?: Buffer;
+    artistIds?: number[];
+  }): Promise<number | "invalid_artists" | null> {
+    // Dedupe: the junction table's PK is (artistId, trackId)
+    const artistIds =
+      values.artistIds === undefined
+        ? undefined
+        : [...new Set(values.artistIds)];
+    if (artistIds !== undefined && !(await this.ownsAllArtists(artistIds))) {
+      return "invalid_artists";
+    }
+
+    const { title, durationMs, compressed_data, cover } = values;
+    return await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(track)
+        .values({
+          title,
+          durationMs,
+          compressed_data,
+          cover,
+          userId: this.userId,
+        })
+        .returning({ id: track.id });
+      if (created === undefined) {
+        return null;
+      }
+      if (artistIds !== undefined && artistIds.length > 0) {
+        await tx
+          .insert(artistToTrack)
+          .values(
+            artistIds.map((artistId) => ({ artistId, trackId: created.id })),
+          );
+      }
+      return created.id;
+    });
   }
 
   async updateTrack(
@@ -77,12 +107,24 @@ export class UserManager {
     return deleted.length > 0;
   }
 
-  // Tracks in the shape the contract's TrackResponse expects.
+  // Tracks in the shape the contract's TrackResponse expects. `coverUrl` points
+  // at the getTrackImage route when the track has a cover; the (potentially
+  // large) cover bytes are never loaded here — we only probe for their
+  // presence via the `hasCover` extra.
   async listTracks(): Promise<
-    { id: number; title: string; duration: number; artists: string[] }[]
+    {
+      id: number;
+      title: string;
+      duration: number;
+      artists: string[];
+      coverUrl?: string;
+    }[]
   > {
     const rows = await db.query.track.findMany({
       columns: { id: true, title: true, durationMs: true },
+      extras: {
+        hasCover: (t, { sql }) => sql<boolean>`${t.cover} is not null`,
+      },
       where: { userId: this.userId },
       with: { artists: { columns: { name: true } } },
       orderBy: { id: "asc" },
@@ -92,6 +134,7 @@ export class UserManager {
       title: row.title,
       duration: row.durationMs,
       artists: row.artists.map((a) => a.name),
+      coverUrl: row.hasCover ? trackImagePath(row.id) : undefined,
     }));
   }
 
