@@ -2,26 +2,31 @@ import type { AppRouteImplementation } from "@ts-rest/fastify";
 import { UserManager } from "../../userManager";
 import { ApiContract } from "../../../contract/contract";
 
-export const editTrack: AppRouteImplementation<
-  typeof ApiContract.editTrack
+export const editPlaylist: AppRouteImplementation<
+  typeof ApiContract.editPlaylist
 > = async ({ body, headers }) => {
   const user = await UserManager.fromToken(headers.authorization);
   if (user === null) {
     return { status: 401, body: "Unauthorized" };
   }
 
-  const { id, title, cover, artistIds } = body;
+  const { id, name, desc, image, trackIds } = body;
 
-  if (title === undefined && cover === undefined && artistIds === undefined) {
+  if (
+    name === undefined &&
+    desc === undefined &&
+    image === undefined &&
+    trackIds === undefined
+  ) {
     return { status: 400, body: "Nothing to update" };
   }
 
-  const result = await user.updateTrack(id, { title, cover, artistIds });
+  const result = await user.updatePlaylist(id, { name, desc, image, trackIds });
   if (result === "not_found") {
-    return { status: 404, body: "Track not found" };
+    return { status: 404, body: "Playlist not found" };
   }
-  if (result === "invalid_artists") {
-    return { status: 400, body: "One or more artist ids are invalid" };
+  if (result === "invalid_tracks") {
+    return { status: 400, body: "One or more track ids are invalid" };
   }
 
   return { status: 200, body: String(id) };

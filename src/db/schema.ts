@@ -43,6 +43,36 @@ export const artistToTrack = pgTable(
   (t) => [primaryKey({ columns: [t.artistId, t.trackId] })],
 );
 
+export const playlist = pgTable("playlist", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  desc: text("description"),
+  image: bytea("image"),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => user.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Ordered playlist entries. The same track may appear in a playlist more than
+// once, so the PK is (playlistId, position) rather than (playlistId, trackId).
+// Deleting a track cascades here, which is what keeps playlists free of
+// dangling ids (the contract requires deleted tracks to vanish from every
+// playlist); gaps left in `position` are fine since only relative order matters.
+export const playlistTrack = pgTable(
+  "playlist_track",
+  {
+    playlistId: integer("playlist_id")
+      .notNull()
+      .references(() => playlist.id, { onDelete: "cascade" }),
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => track.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.playlistId, t.position] })],
+);
+
 export const user = pgTable("user", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   username: text("username").notNull().unique(),

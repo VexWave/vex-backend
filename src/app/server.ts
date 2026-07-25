@@ -13,6 +13,11 @@ import { getArtists } from "./endpoints/getArtists";
 import { getArtistImage } from "./endpoints/getArtistImage";
 import { getTrackImage } from "./endpoints/getTrackImage";
 import { getTrackAudio } from "./endpoints/getTrackAudio";
+import { postPlaylist } from "./endpoints/postPlaylist";
+import { editPlaylist } from "./endpoints/editPlaylist";
+import { deletePlaylist } from "./endpoints/deletePlaylist";
+import { getPlaylists } from "./endpoints/getPlaylists";
+import { getPlaylistImage } from "./endpoints/getPlaylistImage";
 
 const app = Fastify({
   bodyLimit: 100 * 1024 * 1024,
@@ -33,6 +38,11 @@ const router = s.router(ApiContract, {
   getArtistImage,
   getTrackImage,
   getTrackAudio,
+  postPlaylist,
+  editPlaylist,
+  deletePlaylist,
+  getPlaylists,
+  getPlaylistImage,
 });
 
 app.register(s.plugin(router));

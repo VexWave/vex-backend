@@ -15,6 +15,7 @@ export const relations = defineRelations(schema, (r) => ({
   user: {
     tracks: r.many.track({ from: r.user.id, to: r.track.userId }),
     artists: r.many.artist({ from: r.user.id, to: r.artist.userId }),
+    playlists: r.many.playlist({ from: r.user.id, to: r.playlist.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
   },
   artist: {
@@ -37,6 +38,33 @@ export const relations = defineRelations(schema, (r) => ({
     artists: r.many.artist({
       from: r.track.id.through(r.artistToTrack.trackId),
       to: r.artist.id.through(r.artistToTrack.artistId),
+    }),
+  },
+  // playlist <-> track is deliberately NOT a `.through()` many-to-many: the
+  // junction row's `position` carries the playback order and the same track
+  // may appear twice, so queries traverse to the junction itself (`entries`,
+  // ordered by `position`) instead of straight to the tracks.
+  playlist: {
+    owner: r.one.user({
+      from: r.playlist.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+    entries: r.many.playlistTrack({
+      from: r.playlist.id,
+      to: r.playlistTrack.playlistId,
+    }),
+  },
+  playlistTrack: {
+    playlist: r.one.playlist({
+      from: r.playlistTrack.playlistId,
+      to: r.playlist.id,
+      optional: false,
+    }),
+    track: r.one.track({
+      from: r.playlistTrack.trackId,
+      to: r.track.id,
+      optional: false,
     }),
   },
   session: {

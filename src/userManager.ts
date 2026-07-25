@@ -1,8 +1,18 @@
 import { and, eq } from "drizzle-orm";
 import { getUserIdFromToken } from "./auth";
 import { db } from "./db";
-import { artist, artistToTrack, track } from "./db/schema";
-import { artistImagePath, trackImagePath } from "../contract/contract";
+import {
+  artist,
+  artistToTrack,
+  playlist,
+  playlistTrack,
+  track,
+} from "./db/schema";
+import {
+  artistImagePath,
+  playlistImagePath,
+  trackImagePath,
+} from "../contract/contract";
 
 // All user-scoped data access. Every read and write is filtered by the
 // user's id, so a caller can never touch another user's rows.
@@ -63,7 +73,8 @@ export class UserManager {
 
   async updateTrack(
     id: number,
-    changes: { title?: string; artistIds?: number[] },
+    // `cover: null` removes the stored cover; `undefined` leaves it unchanged.
+    changes: { title?: string; cover?: Buffer | null; artistIds?: number[] },
   ): Promise<"updated" | "not_found" | "invalid_artists"> {
     // Dedupe: the junction table's PK is (artistId, trackId)
     const artistIds =
@@ -78,12 +89,17 @@ export class UserManager {
       return "invalid_artists";
     }
 
+    const values: { title?: string; cover?: Buffer | null } = {};
+    if (changes.title !== undefined) {
+      values.title = changes.title;
+    }
+    if (changes.cover !== undefined) {
+      values.cover = changes.cover;
+    }
+
     await db.transaction(async (tx) => {
-      if (changes.title !== undefined) {
-        await tx
-          .update(track)
-          .set({ title: changes.title })
-          .where(this.ownTrack(id));
+      if (Object.keys(values).length > 0) {
+        await tx.update(track).set(values).where(this.ownTrack(id));
       }
       if (artistIds !== undefined) {
         // Full replacement of the track's artist links
@@ -183,13 +199,14 @@ export class UserManager {
     }));
   }
 
-  // Updates an artist's name and/or avatar image. The ownership filter is part
-  // of the WHERE clause, so another user's artist is treated as not found.
+  // Updates an artist's name and/or avatar image (`image: null` removes it).
+  // The ownership filter is part of the WHERE clause, so another user's artist
+  // is treated as not found.
   async updateArtist(
     id: number,
-    changes: { name?: string; image?: Buffer },
+    changes: { name?: string; image?: Buffer | null },
   ): Promise<"updated" | "not_found"> {
-    const values: { name?: string; image?: Buffer } = {};
+    const values: { name?: string; image?: Buffer | null } = {};
     if (changes.name !== undefined) {
       values.name = changes.name;
     }
@@ -213,6 +230,141 @@ export class UserManager {
       .where(and(eq(artist.id, id), eq(artist.userId, this.userId)))
       .returning({ id: artist.id });
     return deleted.length > 0;
+  }
+
+  // --- Playlists ---
+
+  async createPlaylist(values: {
+    name: string;
+    desc?: string;
+    image?: Buffer;
+    trackIds?: number[];
+  }): Promise<number | "invalid_tracks" | null> {
+    const { name, desc, image, trackIds } = values;
+    if (trackIds !== undefined && !(await this.ownsAllTracks(trackIds))) {
+      return "invalid_tracks";
+    }
+
+    return await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(playlist)
+        .values({ name, desc, image, userId: this.userId })
+        .returning({ id: playlist.id });
+      if (created === undefined) {
+        return null;
+      }
+      if (trackIds !== undefined && trackIds.length > 0) {
+        await tx.insert(playlistTrack).values(
+          trackIds.map((trackId, position) => ({
+            playlistId: created.id,
+            trackId,
+            position,
+          })),
+        );
+      }
+      return created.id;
+    });
+  }
+
+  async updatePlaylist(
+    id: number,
+    // `desc: null` clears the description, `image: null` removes the cover;
+    // `undefined` leaves a field unchanged. `trackIds` fully replaces the
+    // ordered track list (an empty array clears it).
+    changes: {
+      name?: string;
+      desc?: string | null;
+      image?: Buffer | null;
+      trackIds?: number[];
+    },
+  ): Promise<"updated" | "not_found" | "invalid_tracks"> {
+    const { trackIds } = changes;
+    if (!(await this.ownsPlaylist(id))) {
+      return "not_found";
+    }
+    if (trackIds !== undefined && !(await this.ownsAllTracks(trackIds))) {
+      return "invalid_tracks";
+    }
+
+    const values: {
+      name?: string;
+      desc?: string | null;
+      image?: Buffer | null;
+    } = {};
+    if (changes.name !== undefined) {
+      values.name = changes.name;
+    }
+    if (changes.desc !== undefined) {
+      values.desc = changes.desc;
+    }
+    if (changes.image !== undefined) {
+      values.image = changes.image;
+    }
+
+    await db.transaction(async (tx) => {
+      if (Object.keys(values).length > 0) {
+        await tx.update(playlist).set(values).where(this.ownPlaylist(id));
+      }
+      if (trackIds !== undefined) {
+        // Full replacement of the ordered track list
+        await tx.delete(playlistTrack).where(eq(playlistTrack.playlistId, id));
+        if (trackIds.length > 0) {
+          await tx.insert(playlistTrack).values(
+            trackIds.map((trackId, position) => ({
+              playlistId: id,
+              trackId,
+              position,
+            })),
+          );
+        }
+      }
+    });
+    return "updated";
+  }
+
+  // Removes the playlist and (via ON DELETE CASCADE) its entries; the tracks
+  // themselves are kept. Returns false when not found or owned by another user.
+  async deletePlaylist(id: number): Promise<boolean> {
+    const deleted = await db
+      .delete(playlist)
+      .where(this.ownPlaylist(id))
+      .returning({ id: playlist.id });
+    return deleted.length > 0;
+  }
+
+  // Playlists in the shape the contract's PlaylistResponse expects, each with
+  // its complete ordered `trackIds` (deleted tracks are cascaded out of the
+  // entries table, so dangling ids can't appear). `imageUrl` points at the
+  // getPlaylistImage route when the playlist has a cover; the (potentially
+  // large) image bytes are never loaded here — we only probe for their
+  // presence via the `hasImage` extra.
+  async listPlaylists(): Promise<
+    {
+      id: number;
+      name: string;
+      desc?: string;
+      trackIds: number[];
+      imageUrl?: string;
+    }[]
+  > {
+    const rows = await db.query.playlist.findMany({
+      columns: { id: true, name: true, desc: true },
+      extras: {
+        hasImage: (t, { sql }) => sql<boolean>`${t.image} is not null`,
+      },
+      where: { userId: this.userId },
+      with: {
+        entries: { columns: { trackId: true }, orderBy: { position: "asc" } },
+      },
+      orderBy: { id: "asc" },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      desc: row.desc ?? undefined,
+      trackIds: row.entries.map((entry) => entry.trackId),
+      imageUrl: row.hasImage ? playlistImagePath(row.id) : undefined,
+    }));
   }
 
   // --- Ownership helpers ---
@@ -240,5 +392,33 @@ export class UserManager {
       where: { id: { in: ids }, userId: this.userId },
     });
     return owned.length === ids.length;
+  }
+
+  // SQL filter matching a playlist only when it belongs to this user, so writes
+  // enforce ownership themselves instead of trusting an earlier check.
+  private ownPlaylist(id: number) {
+    return and(eq(playlist.id, id), eq(playlist.userId, this.userId));
+  }
+
+  private async ownsPlaylist(id: number): Promise<boolean> {
+    const row = await db.query.playlist.findFirst({
+      columns: { id: true },
+      where: { id, userId: this.userId },
+    });
+    return row !== undefined;
+  }
+
+  // Playlists may list the same track more than once, so ids are deduped
+  // before comparing against the owned rows.
+  private async ownsAllTracks(ids: number[]): Promise<boolean> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) {
+      return true;
+    }
+    const owned = await db.query.track.findMany({
+      columns: { id: true },
+      where: { id: { in: unique }, userId: this.userId },
+    });
+    return owned.length === unique.length;
   }
 }
