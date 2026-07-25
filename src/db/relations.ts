@@ -41,9 +41,9 @@ export const relations = defineRelations(schema, (r) => ({
     }),
   },
   // playlist <-> track is deliberately NOT a `.through()` many-to-many: the
-  // junction row's `position` carries the playback order and the same track
-  // may appear twice, so queries traverse to the junction itself (`entries`,
-  // ordered by `position`) instead of straight to the tracks.
+  // junction row's `position` carries the playback order, so queries traverse
+  // to the junction itself (`entries`, ordered by `position`) instead of
+  // straight to the tracks.
   playlist: {
     owner: r.one.user({
       from: r.playlist.userId,

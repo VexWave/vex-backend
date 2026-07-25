@@ -10,9 +10,9 @@ export const postPlaylist: AppRouteImplementation<
     return { status: 401, body: "Unauthorized" };
   }
 
-  const { name, desc, image, trackIds } = body;
+  const { name, image, trackIds } = body;
 
-  const id = await user.createPlaylist({ name, desc, image, trackIds });
+  const id = await user.createPlaylist({ name, image, trackIds });
   if (id === "invalid_tracks") {
     return { status: 400, body: "One or more track ids are invalid" };
   }

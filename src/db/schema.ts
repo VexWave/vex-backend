@@ -5,6 +5,7 @@ import {
   timestamp,
   text,
   primaryKey,
+  unique,
 } from "drizzle-orm/pg-core";
 
 export const artist = pgTable("artist", {
@@ -46,7 +47,6 @@ export const artistToTrack = pgTable(
 export const playlist = pgTable("playlist", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
-  desc: text("description"),
   image: bytea("image"),
   userId: integer("user_id")
     .notNull()
@@ -54,11 +54,13 @@ export const playlist = pgTable("playlist", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Ordered playlist entries. The same track may appear in a playlist more than
-// once, so the PK is (playlistId, position) rather than (playlistId, trackId).
-// Deleting a track cascades here, which is what keeps playlists free of
-// dangling ids (the contract requires deleted tracks to vanish from every
-// playlist); gaps left in `position` are fine since only relative order matters.
+// Ordered playlist entries. A track may appear in a playlist at most once
+// (the contract rejects duplicates), enforced by the unique constraint on
+// (playlistId, trackId); the PK on (playlistId, position) keeps the playback
+// order unambiguous. Deleting a track cascades here, which is what keeps
+// playlists free of dangling ids (the contract requires deleted tracks to
+// vanish from every playlist); gaps left in `position` are fine since only
+// relative order matters.
 export const playlistTrack = pgTable(
   "playlist_track",
   {
@@ -70,7 +72,10 @@ export const playlistTrack = pgTable(
       .references(() => track.id, { onDelete: "cascade" }),
     position: integer("position").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.playlistId, t.position] })],
+  (t) => [
+    primaryKey({ columns: [t.playlistId, t.position] }),
+    unique().on(t.playlistId, t.trackId),
+  ],
 );
 
 export const user = pgTable("user", {

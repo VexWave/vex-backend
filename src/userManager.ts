@@ -236,11 +236,10 @@ export class UserManager {
 
   async createPlaylist(values: {
     name: string;
-    desc?: string;
     image?: Buffer;
     trackIds?: number[];
   }): Promise<number | "invalid_tracks" | null> {
-    const { name, desc, image, trackIds } = values;
+    const { name, image, trackIds } = values;
     if (trackIds !== undefined && !(await this.ownsAllTracks(trackIds))) {
       return "invalid_tracks";
     }
@@ -248,7 +247,7 @@ export class UserManager {
     return await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(playlist)
-        .values({ name, desc, image, userId: this.userId })
+        .values({ name, image, userId: this.userId })
         .returning({ id: playlist.id });
       if (created === undefined) {
         return null;
@@ -268,12 +267,11 @@ export class UserManager {
 
   async updatePlaylist(
     id: number,
-    // `desc: null` clears the description, `image: null` removes the cover;
-    // `undefined` leaves a field unchanged. `trackIds` fully replaces the
-    // ordered track list (an empty array clears it).
+    // `image: null` removes the cover; `undefined` leaves a field unchanged.
+    // `trackIds` fully replaces the ordered track list (an empty array
+    // clears it).
     changes: {
       name?: string;
-      desc?: string | null;
       image?: Buffer | null;
       trackIds?: number[];
     },
@@ -288,14 +286,10 @@ export class UserManager {
 
     const values: {
       name?: string;
-      desc?: string | null;
       image?: Buffer | null;
     } = {};
     if (changes.name !== undefined) {
       values.name = changes.name;
-    }
-    if (changes.desc !== undefined) {
-      values.desc = changes.desc;
     }
     if (changes.image !== undefined) {
       values.image = changes.image;
@@ -342,13 +336,12 @@ export class UserManager {
     {
       id: number;
       name: string;
-      desc?: string;
       trackIds: number[];
       imageUrl?: string;
     }[]
   > {
     const rows = await db.query.playlist.findMany({
-      columns: { id: true, name: true, desc: true },
+      columns: { id: true, name: true },
       extras: {
         hasImage: (t, { sql }) => sql<boolean>`${t.image} is not null`,
       },
@@ -361,7 +354,6 @@ export class UserManager {
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
-      desc: row.desc ?? undefined,
       trackIds: row.entries.map((entry) => entry.trackId),
       imageUrl: row.hasImage ? playlistImagePath(row.id) : undefined,
     }));
@@ -408,17 +400,16 @@ export class UserManager {
     return row !== undefined;
   }
 
-  // Playlists may list the same track more than once, so ids are deduped
-  // before comparing against the owned rows.
+  // Callers pass duplicate-free ids (the contract rejects duplicate playlist
+  // track ids), so a plain count comparison suffices.
   private async ownsAllTracks(ids: number[]): Promise<boolean> {
-    const unique = [...new Set(ids)];
-    if (unique.length === 0) {
+    if (ids.length === 0) {
       return true;
     }
     const owned = await db.query.track.findMany({
       columns: { id: true },
-      where: { id: { in: unique }, userId: this.userId },
+      where: { id: { in: ids }, userId: this.userId },
     });
-    return owned.length === unique.length;
+    return owned.length === ids.length;
   }
 }

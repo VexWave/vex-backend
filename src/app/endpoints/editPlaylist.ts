@@ -10,18 +10,13 @@ export const editPlaylist: AppRouteImplementation<
     return { status: 401, body: "Unauthorized" };
   }
 
-  const { id, name, desc, image, trackIds } = body;
+  const { id, name, image, trackIds } = body;
 
-  if (
-    name === undefined &&
-    desc === undefined &&
-    image === undefined &&
-    trackIds === undefined
-  ) {
+  if (name === undefined && image === undefined && trackIds === undefined) {
     return { status: 400, body: "Nothing to update" };
   }
 
-  const result = await user.updatePlaylist(id, { name, desc, image, trackIds });
+  const result = await user.updatePlaylist(id, { name, image, trackIds });
   if (result === "not_found") {
     return { status: 404, body: "Playlist not found" };
   }
