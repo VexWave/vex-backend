@@ -254,7 +254,8 @@ export const ApiContract = c.router(
         401: z.string(),
         404: z.string(),
       },
-      summary: "Edit an artist's name and/or avatar image (send null to remove)",
+      summary:
+        "Edit an artist's name and/or avatar image (send null to remove)",
     },
     getTrackAudio: {
       method: "GET",
