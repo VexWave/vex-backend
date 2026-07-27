@@ -48,14 +48,10 @@ export const getTrackAudio: AppRouteImplementation<
     return { status: 401, body: "Unauthorized" };
   }
 
-  const compressed = await user.getTrackData(params.id);
-  if (compressed === null) {
+  const audio = await user.getTrackData(params.id);
+  if (audio === null) {
     return { status: 404, body: "Track not found" };
   }
-
-  // Stored bytes are gzipped by the uploader; byte ranges address the
-  // decompressed audio (see the contract's description of this route).
-  const audio = Buffer.from(Bun.gunzipSync(new Uint8Array(compressed)));
 
   reply.header("accept-ranges", "bytes");
 

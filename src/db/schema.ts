@@ -22,7 +22,7 @@ export const track = pgTable("track", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   title: text("title").notNull(),
   durationMs: integer("duration_ms").notNull(),
-  compressed_data: bytea("data").notNull(),
+  data: bytea("data").notNull(),
   cover: bytea("cover"),
   userId: integer("user_id")
     .notNull()

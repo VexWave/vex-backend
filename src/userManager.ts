@@ -32,7 +32,7 @@ export class UserManager {
   async createTrack(values: {
     title: string;
     durationMs: number;
-    compressed_data: Buffer;
+    data: Buffer;
     cover?: Buffer;
     artistIds?: number[];
   }): Promise<number | "invalid_artists" | null> {
@@ -45,14 +45,14 @@ export class UserManager {
       return "invalid_artists";
     }
 
-    const { title, durationMs, compressed_data, cover } = values;
+    const { title, durationMs, data, cover } = values;
     return await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(track)
         .values({
           title,
           durationMs,
-          compressed_data,
+          data,
           cover,
           userId: this.userId,
         })
@@ -154,14 +154,14 @@ export class UserManager {
     }));
   }
 
-  // Returns the stored (still compressed) audio bytes, or null when the track
-  // doesn't exist or belongs to another user.
+  // Returns the stored audio bytes, or null when the track doesn't exist or
+  // belongs to another user.
   async getTrackData(id: number): Promise<Buffer | null> {
     const row = await db.query.track.findFirst({
-      columns: { compressed_data: true },
+      columns: { data: true },
       where: { id, userId: this.userId },
     });
-    return row?.compressed_data ?? null;
+    return row?.data ?? null;
   }
 
   // --- Artists ---

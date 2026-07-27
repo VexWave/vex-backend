@@ -10,12 +10,12 @@ export const postTrack: AppRouteImplementation<
     return { status: 401, body: "Unauthorized" };
   }
 
-  const { title, duration, compressed_data, cover, artistIds } = body;
+  const { title, duration, data, cover, artistIds } = body;
 
   const id = await user.createTrack({
     title,
     durationMs: duration,
-    compressed_data,
+    data,
     cover,
     artistIds,
   });
