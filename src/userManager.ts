@@ -35,7 +35,7 @@ export class UserManager {
     data: Buffer;
     cover?: Buffer;
     artistIds?: number[];
-  }): Promise<number | "invalid_artists" | null> {
+  }): Promise<string | "invalid_artists" | null> {
     // Dedupe: the junction table's PK is (artistId, trackId)
     const artistIds =
       values.artistIds === undefined
@@ -72,7 +72,7 @@ export class UserManager {
   }
 
   async updateTrack(
-    id: number,
+    id: string,
     // `cover: null` removes the stored cover; `undefined` leaves it unchanged.
     changes: { title?: string; cover?: Buffer | null; artistIds?: number[] },
   ): Promise<"updated" | "not_found" | "invalid_artists"> {
@@ -115,7 +115,7 @@ export class UserManager {
   }
 
   // Returns false when the track doesn't exist or belongs to another user.
-  async deleteTrack(id: number): Promise<boolean> {
+  async deleteTrack(id: string): Promise<boolean> {
     const deleted = await db
       .delete(track)
       .where(this.ownTrack(id))
@@ -127,9 +127,13 @@ export class UserManager {
   // at the getTrackImage route when the track has a cover; the (potentially
   // large) cover bytes are never loaded here — we only probe for their
   // presence via the `hasCover` extra.
+  //
+  // Ordered by `createdAt` because the contract promises oldest first and a
+  // uuid id sorts arbitrarily — the client derives "newest uploads" from this
+  // order alone.
   async listTracks(): Promise<
     {
-      id: number;
+      id: string;
       title: string;
       duration: number;
       artists: string[];
@@ -143,7 +147,7 @@ export class UserManager {
       },
       where: { userId: this.userId },
       with: { artists: { columns: { name: true } } },
-      orderBy: { id: "asc" },
+      orderBy: { createdAt: "asc" },
     });
     return rows.map((row) => ({
       id: row.id,
@@ -156,7 +160,7 @@ export class UserManager {
 
   // Returns the stored audio bytes, or null when the track doesn't exist or
   // belongs to another user.
-  async getTrackData(id: number): Promise<Buffer | null> {
+  async getTrackData(id: string): Promise<Buffer | null> {
     const row = await db.query.track.findFirst({
       columns: { data: true },
       where: { id, userId: this.userId },
@@ -237,7 +241,7 @@ export class UserManager {
   async createPlaylist(values: {
     name: string;
     image?: Buffer;
-    trackIds?: number[];
+    trackIds?: string[];
   }): Promise<number | "invalid_tracks" | null> {
     const { name, image, trackIds } = values;
     if (trackIds !== undefined && !(await this.ownsAllTracks(trackIds))) {
@@ -273,7 +277,7 @@ export class UserManager {
     changes: {
       name?: string;
       image?: Buffer | null;
-      trackIds?: number[];
+      trackIds?: string[];
     },
   ): Promise<"updated" | "not_found" | "invalid_tracks"> {
     const { trackIds } = changes;
@@ -336,7 +340,7 @@ export class UserManager {
     {
       id: number;
       name: string;
-      trackIds: number[];
+      trackIds: string[];
       imageUrl?: string;
     }[]
   > {
@@ -363,11 +367,11 @@ export class UserManager {
 
   // SQL filter matching a track only when it belongs to this user, so writes
   // enforce ownership themselves instead of trusting an earlier check.
-  private ownTrack(id: number) {
+  private ownTrack(id: string) {
     return and(eq(track.id, id), eq(track.userId, this.userId));
   }
 
-  private async ownsTrack(id: number): Promise<boolean> {
+  private async ownsTrack(id: string): Promise<boolean> {
     const row = await db.query.track.findFirst({
       columns: { id: true },
       where: { id, userId: this.userId },
@@ -402,7 +406,7 @@ export class UserManager {
 
   // Callers pass duplicate-free ids (the contract rejects duplicate playlist
   // track ids), so a plain count comparison suffices.
-  private async ownsAllTracks(ids: number[]): Promise<boolean> {
+  private async ownsAllTracks(ids: string[]): Promise<boolean> {
     if (ids.length === 0) {
       return true;
     }

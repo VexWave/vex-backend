@@ -15,5 +15,5 @@ export const deleteTrack: AppRouteImplementation<
     return { status: 404, body: "Track not found" };
   }
 
-  return { status: 200, body: String(body.id) };
+  return { status: 200, body: body.id };
 };

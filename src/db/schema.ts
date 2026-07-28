@@ -4,6 +4,7 @@ import {
   bytea,
   timestamp,
   text,
+  uuid,
   primaryKey,
   unique,
 } from "drizzle-orm/pg-core";
@@ -18,8 +19,10 @@ export const artist = pgTable("artist", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// A track's id is a uuid, so it says nothing about when the track was added —
+// `createdAt` is what orders the listing (see `listTracks`).
 export const track = pgTable("track", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  id: uuid("id").primaryKey().defaultRandom(),
   title: text("title").notNull(),
   durationMs: integer("duration_ms").notNull(),
   data: bytea("data").notNull(),
@@ -37,7 +40,7 @@ export const artistToTrack = pgTable(
     artistId: integer("artist_id")
       .notNull()
       .references(() => artist.id, { onDelete: "cascade" }),
-    trackId: integer("track_id")
+    trackId: uuid("track_id")
       .notNull()
       .references(() => track.id, { onDelete: "cascade" }),
   },
@@ -67,7 +70,7 @@ export const playlistTrack = pgTable(
     playlistId: integer("playlist_id")
       .notNull()
       .references(() => playlist.id, { onDelete: "cascade" }),
-    trackId: integer("track_id")
+    trackId: uuid("track_id")
       .notNull()
       .references(() => track.id, { onDelete: "cascade" }),
     position: integer("position").notNull(),

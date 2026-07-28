@@ -36,7 +36,7 @@ async function main(): Promise<void> {
 
   let skipped = 0;
   let decompressed = 0;
-  const failed: number[] = [];
+  const failed: string[] = [];
   let bytesBefore = 0;
   let bytesAfter = 0;
 

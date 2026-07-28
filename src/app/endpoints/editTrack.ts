@@ -24,5 +24,5 @@ export const editTrack: AppRouteImplementation<
     return { status: 400, body: "One or more artist ids are invalid" };
   }
 
-  return { status: 200, body: String(id) };
+  return { status: 200, body: id };
 };

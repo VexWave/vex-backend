@@ -26,5 +26,5 @@ export const postTrack: AppRouteImplementation<
     return { status: 500, body: "Failed to upload track" };
   }
 
-  return { status: 200, body: String(id) };
+  return { status: 200, body: id };
 };
