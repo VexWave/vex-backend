@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import type { FastifyRequest } from "fastify";
 import { getUserIdFromToken } from "./auth";
 import { db } from "./db";
 import {
@@ -19,11 +20,16 @@ import {
 export class UserManager {
   private constructor(readonly userId: number) {}
 
-  // Resolve the requesting user from the authorization header; null = unauthorized.
-  static async fromToken(
-    authorization: string | string[] | undefined,
+  // Resolve the requesting user; null = unauthorized. The `requireAuth` hook
+  // has already resolved the token in `onRequest` and left the id on the
+  // request, so the common path costs no query at all; the fallback covers
+  // routes the gate lets through without a lookup.
+  static async fromRequest(
+    request: FastifyRequest,
   ): Promise<UserManager | null> {
-    const userId = await getUserIdFromToken(authorization);
+    const userId =
+      request.userId ??
+      (await getUserIdFromToken(request.headers.authorization));
     return userId === null ? null : new UserManager(userId);
   }
 
@@ -158,14 +164,42 @@ export class UserManager {
     }));
   }
 
-  // Returns the stored audio bytes, or null when the track doesn't exist or
-  // belongs to another user.
-  async getTrackData(id: string): Promise<Buffer | null> {
+  // Size of a track's stored audio in bytes, or null when the track doesn't
+  // exist or belongs to another user. `octet_length` is evaluated in Postgres,
+  // so answering a `Range` request costs nothing until the bytes are asked for
+  // — and an unsatisfiable range costs nothing at all.
+  async getTrackAudioSize(id: string): Promise<number | null> {
     const row = await db.query.track.findFirst({
-      columns: { data: true },
+      columns: { id: true },
+      extras: {
+        size: (t, { sql }) => sql<number>`octet_length(${t.data})`,
+      },
       where: { id, userId: this.userId },
     });
-    return row?.data ?? null;
+    return row?.size ?? null;
+  }
+
+  // A slice of a track's stored audio: `length` bytes from the zero-based
+  // offset `start`, or null when the track doesn't exist or belongs to another
+  // user. Postgres' `substring` does the slicing, so serving a seek costs the
+  // size of the slice instead of the size of the track — the difference
+  // between a handful of kilobytes and a hundred megabytes per request, every
+  // time a client seeks.
+  async getTrackAudioRange(
+    id: string,
+    start: number,
+    length: number,
+  ): Promise<Buffer | null> {
+    const row = await db.query.track.findFirst({
+      columns: { id: true },
+      extras: {
+        // `substring` counts from 1.
+        chunk: (t, { sql }) =>
+          sql<Buffer>`substring(${t.data} from ${start + 1} for ${length})`,
+      },
+      where: { id, userId: this.userId },
+    });
+    return row?.chunk ?? null;
   }
 
   // --- Artists ---

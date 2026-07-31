@@ -4,8 +4,8 @@ import { ApiContract } from "../../../contract/contract";
 
 export const getTracks: AppRouteImplementation<
   typeof ApiContract.getTracks
-> = async ({ headers }) => {
-  const user = await UserManager.fromToken(headers.authorization);
+> = async ({ request }) => {
+  const user = await UserManager.fromRequest(request);
   if (user === null) {
     return { status: 401, body: "Unauthorized" };
   }

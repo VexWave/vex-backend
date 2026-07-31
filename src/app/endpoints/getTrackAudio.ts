@@ -42,14 +42,17 @@ function parseByteRange(
 
 export const getTrackAudio: AppRouteImplementation<
   typeof ApiContract.getTrackAudio
-> = async ({ params, headers, reply }) => {
-  const user = await UserManager.fromToken(headers.authorization);
+> = async ({ params, headers, request, reply }) => {
+  const user = await UserManager.fromRequest(request);
   if (user === null) {
     return { status: 401, body: "Unauthorized" };
   }
 
-  const audio = await user.getTrackData(params.id);
-  if (audio === null) {
+  // Only the length is read up front. The bytes are fetched once the range is
+  // known, so a seek — or a range that turns out to be unsatisfiable — never
+  // pulls a whole track into memory.
+  const size = await user.getTrackAudioSize(params.id);
+  if (size === null) {
     return { status: 404, body: "Track not found" };
   }
 
@@ -58,20 +61,33 @@ export const getTrackAudio: AppRouteImplementation<
   const rangeHeader = Array.isArray(headers.range)
     ? headers.range[0]
     : headers.range;
+
+  let start = 0;
+  let end = size - 1;
+  let partial = false;
+
   if (rangeHeader !== undefined) {
-    const range = parseByteRange(rangeHeader, audio.length);
+    const range = parseByteRange(rangeHeader, size);
     if (range === "unsatisfiable") {
-      reply.header("content-range", `bytes */${audio.length}`);
+      reply.header("content-range", `bytes */${size}`);
       return { status: 416, body: "Range not satisfiable" };
     }
     if (range !== "ignore") {
-      reply.header(
-        "content-range",
-        `bytes ${range.start}-${range.end}/${audio.length}`,
-      );
-      return { status: 206, body: audio.subarray(range.start, range.end + 1) };
+      ({ start, end } = range);
+      partial = true;
     }
   }
 
-  return { status: 200, body: audio };
+  const body = await user.getTrackAudioRange(params.id, start, end - start + 1);
+  // The track can have been deleted between the two queries.
+  if (body === null) {
+    return { status: 404, body: "Track not found" };
+  }
+
+  if (!partial) {
+    return { status: 200, body };
+  }
+
+  reply.header("content-range", `bytes ${start}-${end}/${size}`);
+  return { status: 206, body };
 };
