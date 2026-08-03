@@ -6,7 +6,7 @@ import {
 } from "../../auth";
 import { db } from "../../db";
 import { session } from "../../db/schema";
-import { RateLimiter } from "../../security/rateLimit";
+import { RateLimiter } from "../../rateLimit";
 import { ApiContract } from "../../../contract/contract";
 
 // Per-account budget, on top of the per-address one in the rate-limit hook.

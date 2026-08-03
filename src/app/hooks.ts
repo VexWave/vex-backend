@@ -12,7 +12,7 @@ import {
   type RoutePolicy,
 } from "../../contract/contract";
 import { getUserIdFromToken } from "../auth";
-import { RateLimiter } from "../security/rateLimit";
+import { RateLimiter } from "../rateLimit";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -32,10 +32,10 @@ function routeOf(config: unknown): AppRoute | undefined {
   return (config as { tsRestRoute?: AppRoute } | undefined)?.tsRestRoute;
 }
 
-// What the contract says about how to treat a route. A route that declares
-// nothing gets the restrictive defaults, so forgetting to classify a new route
-// fails closed: it requires a token, takes only a small body, and isn't
-// cached.
+// What the contract says about how to treat a route (see `RoutePolicy` there
+// for the fields and their defaults). An unclassified route gets the empty
+// policy, and every default is the restrictive one, so forgetting to classify
+// a new route fails closed.
 const DEFAULT_POLICY: RoutePolicy = {};
 
 function policyOf(route: AppRoute | undefined): RoutePolicy {
@@ -54,7 +54,10 @@ export const SMALL_BODY_LIMIT = 512 * 1024;
 
 const MEDIA_BODY_LIMITS: Record<NonNullable<RoutePolicy["body"]>, number> = {
   image: MAX_IMAGE_BASE64 + SMALL_BODY_LIMIT,
-  audio: MAX_AUDIO_BASE64 + SMALL_BODY_LIMIT,
+  // The audio class is `postTrack`, and its body carries a cover image next to
+  // the audio — so the ceiling has to cover both payloads at once, or a track
+  // uploaded with a large cover is refused before the schema ever sees it.
+  audio: MAX_AUDIO_BASE64 + MAX_IMAGE_BASE64 + SMALL_BODY_LIMIT,
 };
 
 /**
@@ -88,7 +91,7 @@ const throttlesPerAddress = new Map<AppRoute, RateLimiter>();
 for (const route of Object.values(ApiContract)) {
   const { throttle } = policyOf(route);
   if (throttle !== undefined) {
-    throttlesPerAddress.set(route, new RateLimiter(throttle[0], throttle[1]));
+    throttlesPerAddress.set(route, new RateLimiter(...throttle));
   }
 }
 
@@ -132,8 +135,10 @@ const BASE_SECURITY_HEADERS = {
 } as const;
 
 /**
- * Sets the headers above on every response, error responses included, then
- * applies the route's cache policy.
+ * Applies the headers above, then the route's cache policy. Runs in
+ * `onRequest` so the responses the pipeline produces itself — a 401 from the
+ * gate below, a 413, a 429 — carry them too, not just the ones an endpoint
+ * returns.
  */
 export const securityHeaders: onRequestHookHandler = async (request, reply) => {
   reply.headers(BASE_SECURITY_HEADERS);

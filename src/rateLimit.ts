@@ -34,10 +34,9 @@ export class RateLimiter {
         : null;
     }
 
-    // Opening a window. Deleting first means the key is re-inserted at the
-    // back, which keeps the map ordered by `resetAt` — every window is the
-    // same length, so insertion order *is* expiry order. That ordering is
-    // what lets `evictOldest` do its job without scanning.
+    // Opening a window. Deleting first re-inserts the key at the back, which
+    // keeps the map ordered by `resetAt` — every window is the same length, so
+    // insertion order *is* expiry order, which is what `evictOldest` relies on.
     this.windows.delete(key);
     if (this.windows.size >= this.maxKeys) {
       this.evictOldest();
@@ -52,21 +51,17 @@ export class RateLimiter {
     this.windows.delete(key);
   }
 
-  // Makes room by dropping windows from the front of the map. Because `hit`
-  // keeps the map ordered by expiry, those are the ones that have already
-  // elapsed — or, if none have, the ones closest to resetting anyway, which
-  // are the cheapest counters to forgive.
+  // Makes room by dropping the window at the front of the map, which the
+  // ordering above makes the one closest to expiring — already elapsed if any
+  // has, and otherwise the cheapest counter to forgive.
   //
-  // Deliberately not a sweep: this runs inline on a request, and the map holds
-  // up to `maxKeys` entries. Scanning all of them would turn the wide
-  // key-rotating attack the limit exists to absorb into a stall for every
-  // connection in flight. Stopping as soon as there is room makes it O(1).
+  // One entry rather than a sweep: this runs inline on a request, and scanning
+  // up to `maxKeys` of them would turn the key-rotating attack the ceiling
+  // exists to absorb into a stall for every connection in flight.
   private evictOldest(): void {
-    for (const key of this.windows.keys()) {
-      if (this.windows.size < this.maxKeys) {
-        return;
-      }
-      this.windows.delete(key);
+    const oldest = this.windows.keys().next();
+    if (!oldest.done) {
+      this.windows.delete(oldest.value);
     }
   }
 }
