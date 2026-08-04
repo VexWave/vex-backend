@@ -1,4 +1,8 @@
-import { initContract, insertParamsIntoPath } from "@ts-rest/core";
+import {
+  convertQueryParamsToUrlString,
+  initContract,
+  insertParamsIntoPath,
+} from "@ts-rest/core";
 import { z } from "zod";
 
 const c = initContract();
@@ -211,6 +215,16 @@ const PUBLIC_IMAGE_DISCLAIMER =
   "is world-readable. Artist and playlist ids are sequential, so their " +
   "images are enumerable by anyone.";
 
+// The content version of the bytes a listing pointed at, carried by the URLs
+// in `imageUrl` / `coverUrl`. It is a cache key rather than an argument: the
+// route answers with the image it holds now whatever the caller pins, and a
+// version it doesn't recognise costs that caller nothing but a revalidation.
+// Unparseable values are therefore ignored rather than rejected — an `<img>`
+// pointed at a hand-written URL has to keep working.
+const ImageVersionQuery = z.object({
+  v: z.string().max(64).optional().catch(undefined),
+});
+
 export const ApiContract = c.router(
   {
     login: {
@@ -328,6 +342,7 @@ export const ApiContract = c.router(
       method: "GET",
       path: "/artist/:id/image",
       pathParams: z.object({ id: z.coerce.number() }),
+      query: ImageVersionQuery,
       responses: {
         // Raw stored image bytes. The declared contentType is a fallback;
         // servers should send the real image MIME when they know it.
@@ -346,6 +361,7 @@ export const ApiContract = c.router(
       method: "GET",
       path: "/track/:id/image",
       pathParams: z.object({ id: z.uuid() }),
+      query: ImageVersionQuery,
       responses: {
         // Raw stored image bytes. The declared contentType is a fallback;
         // servers should send the real image MIME when they know it.
@@ -497,6 +513,7 @@ export const ApiContract = c.router(
       method: "GET",
       path: "/playlist/:id/image",
       pathParams: z.object({ id: z.coerce.number() }),
+      query: ImageVersionQuery,
       responses: {
         // Raw stored image bytes. The declared contentType is a fallback;
         // servers should send the real image MIME when they know it.
@@ -531,31 +548,35 @@ export const trackAudioPath = (trackId: string) =>
   });
 
 /**
+ * Concrete request path for one of the image routes, pinned to the version of
+ * the bytes the caller was told about so that the answer can be cached for
+ * good: editing the image changes the hash, and the client learns the new URL
+ * from its next listing instead of holding a copy that has quietly gone stale.
+ *
+ * The three routes below differ only in which path they fill in and how their
+ * id is spelled, so each is one line over this.
+ */
+const imagePath = (path: string, id: string | number, version?: string) =>
+  insertParamsIntoPath({ path, params: { id: String(id) } }) +
+  convertQueryParamsToUrlString({ v: version });
+
+/**
  * Concrete request path for `getArtistImage`. Returned as `imageUrl` on artist
  * listings so clients know where to fetch the raw image bytes.
  */
-export const artistImagePath = (artistId: number) =>
-  insertParamsIntoPath({
-    path: ApiContract.getArtistImage.path,
-    params: { id: String(artistId) },
-  });
+export const artistImagePath = (artistId: number, version?: string) =>
+  imagePath(ApiContract.getArtistImage.path, artistId, version);
 
 /**
  * Concrete request path for `getTrackImage`. Returned as `coverUrl` on track
  * listings so clients know where to fetch the raw cover-image bytes.
  */
-export const trackImagePath = (trackId: string) =>
-  insertParamsIntoPath({
-    path: ApiContract.getTrackImage.path,
-    params: { id: trackId },
-  });
+export const trackImagePath = (trackId: string, version?: string) =>
+  imagePath(ApiContract.getTrackImage.path, trackId, version);
 
 /**
  * Concrete request path for `getPlaylistImage`. Returned as `imageUrl` on
  * playlist listings so clients know where to fetch the raw cover-image bytes.
  */
-export const playlistImagePath = (playlistId: number) =>
-  insertParamsIntoPath({
-    path: ApiContract.getPlaylistImage.path,
-    params: { id: String(playlistId) },
-  });
+export const playlistImagePath = (playlistId: number, version?: string) =>
+  imagePath(ApiContract.getPlaylistImage.path, playlistId, version);

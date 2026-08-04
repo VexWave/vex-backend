@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   integer,
@@ -9,10 +10,29 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 
+// Content hash of an image column, maintained by Postgres itself so no write
+// path can forget to bump it. It does two jobs at once:
+//
+//   - It versions the image's URL (`?v=<hash>`), which is what lets the bytes
+//     be cached forever: editing an image changes the hash, so the new bytes
+//     arrive under a new URL instead of hiding behind a cached old one.
+//   - `md5(NULL)` is NULL, so it doubles as the "has an image" probe the
+//     listings need — reading it never loads the bytes themselves.
+//
+// Stored (not virtual), so it costs nothing per read. Postgres recomputes a
+// stored generated column on every UPDATE of the row, not only when the image
+// itself is in the SET list — so renaming a track detoasts and re-hashes a
+// cover nobody touched. That is the price of the guarantee above, and it is
+// worth it: the alternative is every write path remembering to hash, and the
+// edit routes are rare next to the reads this makes cacheable.
+const imageHashOf = (column: string) =>
+  text(`${column}_hash`).generatedAlwaysAs(sql.raw(`md5(${column})`));
+
 export const artist = pgTable("artist", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   image: bytea("image"),
+  imageHash: imageHashOf("image"),
   userId: integer("user_id")
     .notNull()
     .references(() => user.id),
@@ -27,6 +47,7 @@ export const track = pgTable("track", {
   durationMs: integer("duration_ms").notNull(),
   data: bytea("data").notNull(),
   cover: bytea("cover"),
+  coverHash: imageHashOf("cover"),
   userId: integer("user_id")
     .notNull()
     .references(() => user.id),
@@ -51,6 +72,7 @@ export const playlist = pgTable("playlist", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   image: bytea("image"),
+  imageHash: imageHashOf("image"),
   userId: integer("user_id")
     .notNull()
     .references(() => user.id),

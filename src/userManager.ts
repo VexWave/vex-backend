@@ -130,9 +130,10 @@ export class UserManager {
   }
 
   // Tracks in the shape the contract's TrackResponse expects. `coverUrl` points
-  // at the getTrackImage route when the track has a cover; the (potentially
-  // large) cover bytes are never loaded here — we only probe for their
-  // presence via the `hasCover` extra.
+  // at the getTrackImage route when the track has a cover, and pins the version
+  // of the bytes it points at so the client can cache them for good; the
+  // (potentially large) cover bytes are never loaded here — `coverHash` is
+  // generated from them, and is null exactly when there is no cover.
   //
   // Ordered by `createdAt` because the contract promises oldest first and a
   // uuid id sorts arbitrarily — the client derives "newest uploads" from this
@@ -147,10 +148,7 @@ export class UserManager {
     }[]
   > {
     const rows = await db.query.track.findMany({
-      columns: { id: true, title: true, durationMs: true },
-      extras: {
-        hasCover: (t, { sql }) => sql<boolean>`${t.cover} is not null`,
-      },
+      columns: { id: true, title: true, durationMs: true, coverHash: true },
       where: { userId: this.userId },
       with: { artists: { columns: { name: true } } },
       orderBy: { createdAt: "asc" },
@@ -160,7 +158,10 @@ export class UserManager {
       title: row.title,
       duration: row.durationMs,
       artists: row.artists.map((a) => a.name),
-      coverUrl: row.hasCover ? trackImagePath(row.id) : undefined,
+      coverUrl:
+        row.coverHash === null
+          ? undefined
+          : trackImagePath(row.id, row.coverHash),
     }));
   }
 
@@ -215,25 +216,27 @@ export class UserManager {
     return created?.id ?? null;
   }
 
-  // Artists in the shape the contract's ArtistResponse expects. `imageUrl` points
-  // at the getArtistImage route when the artist has an image; the (potentially
-  // large) image bytes are never loaded here — we only probe for their
-  // presence via the `hasImage` extra.
+  // Artists in the shape the contract's ArtistResponse expects. `imageUrl`
+  // points at the getArtistImage route when the artist has an image, and pins
+  // the version of the bytes it points at so the client can cache them for
+  // good; the (potentially large) image bytes are never loaded here —
+  // `imageHash` is generated from them, and is null exactly when there is no
+  // image.
   async listArtists(): Promise<
     { id: number; name: string; imageUrl?: string }[]
   > {
     const rows = await db.query.artist.findMany({
-      columns: { id: true, name: true },
-      extras: {
-        hasImage: (t, { sql }) => sql<boolean>`${t.image} is not null`,
-      },
+      columns: { id: true, name: true, imageHash: true },
       where: { userId: this.userId },
       orderBy: { id: "asc" },
     });
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
-      imageUrl: row.hasImage ? artistImagePath(row.id) : undefined,
+      imageUrl:
+        row.imageHash === null
+          ? undefined
+          : artistImagePath(row.id, row.imageHash),
     }));
   }
 
@@ -367,9 +370,10 @@ export class UserManager {
   // Playlists in the shape the contract's PlaylistResponse expects, each with
   // its complete ordered `trackIds` (deleted tracks are cascaded out of the
   // entries table, so dangling ids can't appear). `imageUrl` points at the
-  // getPlaylistImage route when the playlist has a cover; the (potentially
-  // large) image bytes are never loaded here — we only probe for their
-  // presence via the `hasImage` extra.
+  // getPlaylistImage route when the playlist has a cover, and pins the version
+  // of the bytes it points at so the client can cache them for good; the
+  // (potentially large) image bytes are never loaded here — `imageHash` is
+  // generated from them, and is null exactly when there is no cover.
   async listPlaylists(): Promise<
     {
       id: number;
@@ -379,10 +383,7 @@ export class UserManager {
     }[]
   > {
     const rows = await db.query.playlist.findMany({
-      columns: { id: true, name: true },
-      extras: {
-        hasImage: (t, { sql }) => sql<boolean>`${t.image} is not null`,
-      },
+      columns: { id: true, name: true, imageHash: true },
       where: { userId: this.userId },
       with: {
         entries: { columns: { trackId: true }, orderBy: { position: "asc" } },
@@ -393,7 +394,10 @@ export class UserManager {
       id: row.id,
       name: row.name,
       trackIds: row.entries.map((entry) => entry.trackId),
-      imageUrl: row.hasImage ? playlistImagePath(row.id) : undefined,
+      imageUrl:
+        row.imageHash === null
+          ? undefined
+          : playlistImagePath(row.id, row.imageHash),
     }));
   }
 
