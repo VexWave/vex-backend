@@ -13,6 +13,16 @@ const EnvSchema = z.object({
   // control sets that header: with it on, any client can forge its source
   // address and walk straight through the per-IP rate limits.
   TRUST_PROXY: z.stringbool().default(false),
+
+  // How much memory the served-image cache may hold, in bytes. It is a hard
+  // ceiling on that cache's own footprint, not on the process, so leave room
+  // for everything else — an upload alone can hold ~100 MiB while it is being
+  // decoded. Set it to 0 to serve every image from the database.
+  IMAGE_CACHE_BYTES: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(128 * 1024 * 1024),
 });
 
 export const env = EnvSchema.parse(process.env);

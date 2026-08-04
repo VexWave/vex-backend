@@ -225,6 +225,12 @@ const ImageVersionQuery = z.object({
   v: z.string().max(64).optional().catch(undefined),
 });
 
+const IMAGE_CACHING_NOTE =
+  " Responses carry an `ETag` and answer a conditional request with `304`. A " +
+  "URL that pins the current version (`?v=…`, as handed out by the listings) " +
+  "may be cached indefinitely — new bytes always arrive under a new URL; " +
+  "without one the client revalidates on every use.";
+
 export const ApiContract = c.router(
   {
     login: {
@@ -350,11 +356,13 @@ export const ApiContract = c.router(
           contentType: "application/octet-stream",
           body: c.type<Uint8Array>(),
         }),
+        // The caller's copy is current (`If-None-Match` matched the ETag).
+        304: c.noBody(),
         404: z.string(),
         ...RateLimited,
       },
       summary: "Get an artist's raw image bytes (public, no auth required)",
-      description: PUBLIC_IMAGE_DISCLAIMER,
+      description: PUBLIC_IMAGE_DISCLAIMER + IMAGE_CACHING_NOTE,
       metadata: { public: true, cache: "shared" } satisfies RoutePolicy,
     },
     getTrackImage: {
@@ -369,11 +377,13 @@ export const ApiContract = c.router(
           contentType: "application/octet-stream",
           body: c.type<Uint8Array>(),
         }),
+        // The caller's copy is current (`If-None-Match` matched the ETag).
+        304: c.noBody(),
         404: z.string(),
         ...RateLimited,
       },
       summary: "Get a track's raw cover image bytes (public, no auth required)",
-      description: PUBLIC_IMAGE_DISCLAIMER,
+      description: PUBLIC_IMAGE_DISCLAIMER + IMAGE_CACHING_NOTE,
       metadata: { public: true, cache: "shared" } satisfies RoutePolicy,
     },
     editArtist: {
@@ -521,12 +531,14 @@ export const ApiContract = c.router(
           contentType: "application/octet-stream",
           body: c.type<Uint8Array>(),
         }),
+        // The caller's copy is current (`If-None-Match` matched the ETag).
+        304: c.noBody(),
         404: z.string(),
         ...RateLimited,
       },
       summary:
         "Get a playlist's raw cover-image bytes (public, no auth required)",
-      description: PUBLIC_IMAGE_DISCLAIMER,
+      description: PUBLIC_IMAGE_DISCLAIMER + IMAGE_CACHING_NOTE,
       metadata: { public: true, cache: "shared" } satisfies RoutePolicy,
     },
   },
