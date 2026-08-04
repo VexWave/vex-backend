@@ -3,6 +3,7 @@ import { initServer } from "@ts-rest/fastify";
 import { ApiContract } from "../../contract/contract";
 import { env } from "../env";
 import {
+  cacheHeaders,
   handleUncaughtError,
   limitRouteBodies,
   rateLimit,
@@ -81,6 +82,7 @@ app.addHook("onRoute", limitRouteBodies);
 app.addHook("onRequest", securityHeaders);
 app.addHook("onRequest", rateLimit);
 app.addHook("onRequest", requireAuth);
+app.addHook("onSend", cacheHeaders);
 
 app.register(s.plugin(router));
 

@@ -4,6 +4,7 @@ import type {
   FastifyRequest,
   onRequestHookHandler,
   onRouteHookHandler,
+  onSendHookHandler,
 } from "fastify";
 import {
   ApiContract,
@@ -13,6 +14,7 @@ import {
 } from "../../contract/contract";
 import { getUserIdFromToken } from "../auth";
 import { RateLimiter } from "../rateLimit";
+import { NO_STORE, PRIVATE_FOREVER } from "./cacheControl";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -135,24 +137,56 @@ const BASE_SECURITY_HEADERS = {
 } as const;
 
 /**
- * Applies the headers above, then the route's cache policy. Runs in
- * `onRequest` so the responses the pipeline produces itself — a 401 from the
- * gate below, a 413, a 429 — carry them too, not just the ones an endpoint
+ * Applies the headers above, then the `Vary` a per-caller answer needs. Runs
+ * in `onRequest` so the responses the pipeline produces itself — a 401 from
+ * the gate below, a 413, a 429 — carry them too, not just the ones an endpoint
  * returns.
  */
 export const securityHeaders: onRequestHookHandler = async (request, reply) => {
   reply.headers(BASE_SECURITY_HEADERS);
 
   const { cache } = policyOf(routeOf(request.routeOptions.config));
-  if (cache === "shared") {
-    return;
-  }
 
-  // Everything else is answered per session token — including `/login`, whose
-  // body *is* the token. `Vary` keeps a cache from handing one user's reply to
-  // the next; `no-store` keeps it from holding on to the reply at all.
-  reply.header("vary", "Authorization");
-  reply.header("cache-control", cache === "private" ? "private" : "no-store");
+  // Public versioned bytes are the same for every caller, so they carry no
+  // `Vary`. Everything else is answered per session token — including
+  // `/login`, whose body *is* the token — and `Vary` is what keeps a cache
+  // from handing one user's reply to the next.
+  if (cache !== "versioned") {
+    reply.header("vary", "Authorization");
+  }
+};
+
+/**
+ * Applies the route's caching promise. Runs in `onSend` because that is the
+ * first point that knows what the answer turned out to be — and the promise a
+ * route makes about its bytes must not be inherited by its failures: on a
+ * route whose successes may be kept for a year, a `404` kept for a year means
+ * an image deleted and later restored byte-for-byte goes on being "not found",
+ * and a `401` outlives the session that caused it.
+ *
+ * A `304` is not a failure: it is how a caller revalidates a copy it already
+ * holds, and it has to carry the freshness headers that copy is updated with.
+ *
+ * Successes on a `"versioned"` route are the one case left alone, because only
+ * `serveImage` knows whether the version the URL pinned is the one being
+ * served; it sets the header itself.
+ */
+export const cacheHeaders: onSendHookHandler = async (
+  request,
+  reply,
+  payload,
+) => {
+  const { cache } = policyOf(routeOf(request.routeOptions.config));
+
+  if (reply.statusCode >= 400) {
+    reply.header("cache-control", NO_STORE);
+  } else if (cache !== "versioned") {
+    reply.header(
+      "cache-control",
+      cache === "private-immutable" ? PRIVATE_FOREVER : NO_STORE,
+    );
+  }
+  return payload;
 };
 
 // ---------------------------------------------------------------------------

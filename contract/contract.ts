@@ -185,11 +185,17 @@ export type RoutePolicy = {
 
   /**
    * How the response may be cached. The default forbids storing it at all.
-   * `"private"` keeps a per-user body out of shared caches while still
-   * letting the browser reuse it; `"shared"` is for bodies any caller may
-   * read, and leaves caching to the client and any CDN in front.
+   *
+   * `"versioned"` is for public bytes whose URL carries a content version
+   * (`?v=<hash>`, see `artistImagePath` and friends): a request that pins one
+   * has named the exact bytes it wants, so the answer can be kept forever —
+   * an edit publishes new bytes under a new URL rather than hiding behind the
+   * cached old ones. A request that pins nothing revalidates every time.
+   *
+   * `"private-immutable"` is for per-user bytes that never change for a given
+   * URL: the caller may keep them forever, shared caches may not store them.
    */
-  cache?: "private" | "shared";
+  cache?: "versioned" | "private-immutable";
 
   /**
    * A stricter per-address request budget than the blanket one, as
@@ -363,7 +369,7 @@ export const ApiContract = c.router(
       },
       summary: "Get an artist's raw image bytes (public, no auth required)",
       description: PUBLIC_IMAGE_DISCLAIMER + IMAGE_CACHING_NOTE,
-      metadata: { public: true, cache: "shared" } satisfies RoutePolicy,
+      metadata: { public: true, cache: "versioned" } satisfies RoutePolicy,
     },
     getTrackImage: {
       method: "GET",
@@ -384,7 +390,7 @@ export const ApiContract = c.router(
       },
       summary: "Get a track's raw cover image bytes (public, no auth required)",
       description: PUBLIC_IMAGE_DISCLAIMER + IMAGE_CACHING_NOTE,
-      metadata: { public: true, cache: "shared" } satisfies RoutePolicy,
+      metadata: { public: true, cache: "versioned" } satisfies RoutePolicy,
     },
     editArtist: {
       method: "POST",
@@ -421,6 +427,8 @@ export const ApiContract = c.router(
           contentType: "application/octet-stream",
           body: c.type<Uint8Array>(),
         }),
+        // The caller's copy is current (`If-None-Match` matched the ETag).
+        304: c.noBody(),
         401: z.string(),
         404: z.string(),
         416: z.string(),
@@ -435,10 +443,13 @@ export const ApiContract = c.router(
         "verbatim and un-encoded. Clients that need progressive bytes (the " +
         "app's bun-side stream proxy) fetch this route directly via " +
         "`trackAudioPath` — the ts-rest fetch client buffers response " +
-        "bodies, which would defeat streaming.",
-      // Per-user bytes, but whole tracks: refusing to cache them would cost
-      // more than it protects, so they stay out of shared caches only.
-      metadata: { cache: "private" } satisfies RoutePolicy,
+        "bodies, which would defeat streaming. A track's audio never " +
+        "changes once uploaded, so a client may keep a downloaded copy for " +
+        "as long as the track exists.",
+      // A track's stored audio is write-once — no route replaces it — so its
+      // id addresses those bytes for good and the caller can hold on to them
+      // indefinitely. Per-user, so no shared cache may keep a copy.
+      metadata: { cache: "private-immutable" } satisfies RoutePolicy,
     },
     editTrack: {
       method: "POST",
@@ -539,7 +550,7 @@ export const ApiContract = c.router(
       summary:
         "Get a playlist's raw cover-image bytes (public, no auth required)",
       description: PUBLIC_IMAGE_DISCLAIMER + IMAGE_CACHING_NOTE,
-      metadata: { public: true, cache: "shared" } satisfies RoutePolicy,
+      metadata: { public: true, cache: "versioned" } satisfies RoutePolicy,
     },
   },
   {

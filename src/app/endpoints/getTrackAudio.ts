@@ -1,6 +1,7 @@
 import type { AppRouteImplementation } from "@ts-rest/fastify";
 import { UserManager } from "../../userManager";
 import { ApiContract } from "../../../contract/contract";
+import { etagMatches } from "../../utils";
 
 // Parses a single-range `Range` header against a body of `size` bytes.
 // - { start, end }: satisfiable range (inclusive bounds)
@@ -57,6 +58,17 @@ export const getTrackAudio: AppRouteImplementation<
   }
 
   reply.header("accept-ranges", "bytes");
+
+  // A track's audio is written once and never replaced, so its id identifies
+  // those bytes for as long as they exist — a validator already at hand, where
+  // a content hash would mean digesting up to 75 MiB on every upload to say
+  // the same thing. Checked after the lookup above so that a `304` is only
+  // ever an answer about a track this caller owns.
+  const etag = `"${params.id}"`;
+  reply.header("etag", etag);
+  if (etagMatches(request.headers["if-none-match"], etag)) {
+    return { status: 304, body: undefined };
+  }
 
   const rangeHeader = Array.isArray(headers.range)
     ? headers.range[0]
