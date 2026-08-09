@@ -23,6 +23,16 @@ const EnvSchema = z.object({
     .int()
     .min(0)
     .default(128 * 1024 * 1024),
+
+  // Discord webhook that notable events are mirrored to — see `src/events.ts`
+  // for the list. Anyone holding this URL can post to the channel, so treat it
+  // as a secret. A blank value means the same as unset: this schema is parsed
+  // at import, so a bare `DISCORD_WEBHOOK_URL=` left in `.env` has to mean
+  // "off" rather than take the server down at boot.
+  DISCORD_WEBHOOK_URL: z
+    .union([z.url(), z.literal("")])
+    .optional()
+    .transform((value) => value || undefined),
 });
 
 export const env = EnvSchema.parse(process.env);

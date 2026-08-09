@@ -6,6 +6,7 @@ import {
 } from "../../auth";
 import { db } from "../../db";
 import { session } from "../../db/schema";
+import { events, notify } from "../../events";
 import { RateLimiter } from "../../rateLimit";
 import { ApiContract } from "../../../contract/contract";
 
@@ -21,6 +22,7 @@ const attemptsPerAccount = new RateLimiter(30, 15 * 60_000);
 export const login: AppRouteImplementation<typeof ApiContract.login> = async ({
   body,
   reply,
+  request,
 }) => {
   const { username, password } = body;
 
@@ -30,6 +32,7 @@ export const login: AppRouteImplementation<typeof ApiContract.login> = async ({
   const accountKey = username.toLowerCase();
   const retryAfter = attemptsPerAccount.hit(accountKey);
   if (retryAfter !== null) {
+    notify(events.loginThrottled({ username, ip: request.ip }));
     reply.header("retry-after", String(retryAfter));
     return { status: 429, body: "Too many login attempts" };
   }
@@ -39,15 +42,17 @@ export const login: AppRouteImplementation<typeof ApiContract.login> = async ({
     where: { username },
   });
 
-  if (!account) {
-    // Hash anyway. Returning here without doing the work would make an unknown
-    // username answer in a fraction of the time a known one takes, which is
-    // all it takes to enumerate accounts.
-    await verifyAgainstDummyHash(password);
-    return { status: 401, body: "Invalid username or password" };
-  }
+  // Hash either way. Returning early on an unknown username would make it
+  // answer in a fraction of the time a known one takes, which is all it takes
+  // to enumerate accounts — so the two paths converge here, and the report
+  // below is made once, after them, rather than inside each. `notify` does no
+  // I/O of its own, so it costs both paths the same.
+  const verified = account
+    ? await verifyPassword(password, account.password)
+    : await verifyAgainstDummyHash(password).then(() => false);
 
-  if (!(await verifyPassword(password, account.password))) {
+  if (!account || !verified) {
+    notify(events.loginFailed({ username, ip: request.ip }));
     return { status: 401, body: "Invalid username or password" };
   }
 
@@ -55,6 +60,8 @@ export const login: AppRouteImplementation<typeof ApiContract.login> = async ({
 
   const token = generateToken();
   await db.insert(session).values({ token, userId: account.id });
+
+  notify(events.loginSucceeded({ username, ip: request.ip }));
 
   return { status: 200, body: { token } };
 };

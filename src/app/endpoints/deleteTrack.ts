@@ -1,4 +1,5 @@
 import type { AppRouteImplementation } from "@ts-rest/fastify";
+import { events, notify } from "../../events";
 import { UserManager } from "../../userManager";
 import { ApiContract } from "../../../contract/contract";
 
@@ -14,6 +15,8 @@ export const deleteTrack: AppRouteImplementation<
   if (!deleted) {
     return { status: 404, body: "Track not found" };
   }
+
+  notify(events.trackDeleted({ userId: user.userId, trackId: body.id }));
 
   return { status: 200, body: body.id };
 };

@@ -3,6 +3,7 @@ import type {
   FastifyReply,
   FastifyRequest,
   onRequestHookHandler,
+  onResponseHookHandler,
   onRouteHookHandler,
   onSendHookHandler,
 } from "fastify";
@@ -13,6 +14,8 @@ import {
   type RoutePolicy,
 } from "../../contract/contract";
 import { getUserIdFromToken } from "../auth";
+import { events, notify } from "../events";
+import { logRequest, messageOf } from "../logger";
 import { RateLimiter } from "../rateLimit";
 import { NO_STORE, PRIVATE_FOREVER } from "./cacheControl";
 
@@ -24,6 +27,12 @@ declare module "fastify" {
      * public routes, which the gate lets through without a lookup.
      */
     userId?: number;
+    /**
+     * What `handleUncaughtError` caught, left here for `logRequests` to print
+     * once the response is finished. See that handler for why it isn't logged
+     * where it is caught.
+     */
+    logError?: Error;
   }
 }
 
@@ -114,6 +123,15 @@ export const rateLimit: onRequestHookHandler = async (request, reply) => {
 
   const retryAfter = throttled ?? overall;
   if (retryAfter !== null) {
+    // One of only two places a 429 is produced (the other is `login`, for its
+    // per-account budget), and both already hold the context the report wants
+    // — so nothing downstream has to work out what happened from a status code.
+    notify(
+      events.rateLimited({
+        path: request.routeOptions.url ?? request.url,
+        ip: request.ip,
+      }),
+    );
     reply.header("retry-after", String(retryAfter));
     return reply.status(429).send("Too many requests");
   }
@@ -231,6 +249,11 @@ export const requireAuth: onRequestHookHandler = async (request, reply) => {
  * Anything from 500 up is reported as a bare "Internal Server Error": those
  * errors carry driver text, and a Postgres message names tables, columns and
  * constraints. Only the log gets to see it.
+ *
+ * The error is stashed rather than logged. This runs before the response is
+ * finished, and the log line for the request is written after it — printing
+ * here would put the stack above the line it belongs to instead of under it.
+ * `logRequests` picks it up and is the only thing that prints it.
  */
 export function handleUncaughtError(
   error: Error & { statusCode?: number },
@@ -238,14 +261,62 @@ export function handleUncaughtError(
   reply: FastifyReply,
 ): FastifyReply {
   const status = error.statusCode ?? 500;
+  request.logError = error;
 
   if (status >= 500) {
-    request.log.error({ err: error }, "unhandled error");
     return reply.status(500).send("Internal Server Error");
   }
 
   // 4xx are raised by Fastify itself — unparseable JSON, a body over the
   // route's limit — and describe the request rather than the server.
-  request.log.info({ err: error, status }, "request rejected");
   return reply.status(status).send(error.message);
 }
+
+// ---------------------------------------------------------------------------
+// Request log
+// ---------------------------------------------------------------------------
+
+/**
+ * The one line each request leaves behind, and the only place an error is
+ * printed. Fastify's own logging is off (`logger: false` in `server.ts`); this
+ * hook replaces it, and registering it is also what keeps `reply.elapsedTime`
+ * measured at all.
+ */
+export const logRequests: onResponseHookHandler = async (request, reply) => {
+  const status = reply.statusCode;
+  // The registered route pattern when one matched (`/artist/:id/image`), which
+  // keeps a route's lines identical whatever ids they carry. A 404 has no
+  // pattern, so it falls back to what was asked for — attacker-controlled text,
+  // which the logger scrubs and caps before it reaches a terminal.
+  const path = request.routeOptions.url ?? request.url;
+  const failure = request.logError;
+
+  logRequest({
+    method: request.method,
+    status,
+    ms: Math.round(reply.elapsedTime),
+    path,
+    who:
+      request.userId === undefined ? `ip:${request.ip}` : `u:${request.userId}`,
+    // Below 500 the reason fits on the line — "Body too large", "Unexpected
+    // token in JSON". At 500 and above it becomes the stack block, because the
+    // message alone never explains a server fault.
+    note: status >= 500 ? undefined : messageOf(failure),
+    err: status >= 500 ? failure : undefined,
+  });
+
+  if (status >= 500) {
+    // Keyed on the status rather than on a throw: an endpoint can *return*
+    // `{ status: 500 }` without anything being thrown — see `postTrack` — and
+    // the error handler never sees those.
+    notify(
+      events.serverError({
+        method: request.method,
+        path,
+        userId: request.userId,
+        ip: request.ip,
+        err: failure,
+      }),
+    );
+  }
+};

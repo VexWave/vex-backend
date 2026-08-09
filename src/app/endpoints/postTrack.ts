@@ -1,4 +1,5 @@
 import type { AppRouteImplementation } from "@ts-rest/fastify";
+import { events, notify } from "../../events";
 import { UserManager } from "../../userManager";
 import { ApiContract } from "../../../contract/contract";
 
@@ -25,6 +26,8 @@ export const postTrack: AppRouteImplementation<
   if (id === null) {
     return { status: 500, body: "Failed to upload track" };
   }
+
+  notify(events.trackUploaded({ userId: user.userId, trackId: id, title }));
 
   return { status: 200, body: id };
 };
