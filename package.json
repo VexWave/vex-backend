@@ -1,5 +1,6 @@
 {
   "name": "player-backend",
+  "version": "0.0.0",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -7,6 +8,7 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "cli": "bun cli/index.ts",
+    "release": "bun scripts/release.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
