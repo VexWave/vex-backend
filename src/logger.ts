@@ -45,16 +45,20 @@ function paint(text: string, colour: number): string {
 }
 
 /** Drops control characters — escape sequences among them — and caps. */
-function clean(text: string, max = 200): string {
-  let out = "";
+export function clean(text: string, max = 200): string {
+  const kept: string[] = [];
   for (const character of text) {
     const code = character.codePointAt(0) ?? 0;
     // C0 and C1 controls, which is where the escape sequences live.
     if (code >= 0x20 && (code < 0x7f || code > 0x9f)) {
-      out += character;
+      kept.push(character);
     }
   }
-  return out.length > max ? `${out.slice(0, max - 1)}…` : out;
+  // Capped by code point rather than by `.length`: an astral character is two
+  // UTF-16 units, and slicing between them leaves a lone surrogate.
+  return kept.length > max
+    ? `${kept.slice(0, max - 1).join("")}…`
+    : kept.join("");
 }
 
 // Drizzle builds a failed query's message as `Failed query: <sql>\nparams:

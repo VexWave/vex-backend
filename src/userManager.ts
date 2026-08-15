@@ -33,6 +33,13 @@ export class UserManager {
     return userId === null ? null : new UserManager(userId);
   }
 
+  // Acts as a given user, for operator tooling (`cli/`) with no request to
+  // authenticate. Still scoped to `userId`; what's missing is only the proof
+  // the caller owns that id — so nothing serving HTTP may use this.
+  static forUserId(userId: number): UserManager {
+    return new UserManager(userId);
+  }
+
   // --- Tracks ---
 
   async createTrack(values: {
