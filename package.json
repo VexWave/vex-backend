@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
+    "cli": "bun cli/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -21,6 +22,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@clack/prompts": "^1.7.0",
     "@ts-rest/core": "3.53.0-rc.1",
     "@ts-rest/fastify": "3.53.0-rc.1",
     "drizzle-orm": "v1.0.0-rc.4",
