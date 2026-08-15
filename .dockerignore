@@ -1,0 +1,22 @@
+# Holds the database password; the container is configured by compose.
+.env
+.env.*
+!.env.example
+
+# Reinstalled in the image, for the image's platform.
+node_modules
+
+.git
+.github
+.claude
+scripts
+out
+dist
+coverage
+*.log
+*.tsbuildinfo
+.idea
+.DS_Store
+Dockerfile
+.dockerignore
+docker-compose.yml
