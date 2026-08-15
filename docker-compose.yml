@@ -1,33 +1,17 @@
-#   docker compose run --rm app bun run db:push   # create the tables
-#   docker compose run --rm app bun run cli       # create the first account
-#   docker compose up -d
-#
-# Settings come from `.env` — see `.env.example`. Postgres is yours to provide.
+# Builds this checkout, configured by `.env` (see `.env.example`). Deployments
+# use `docker-compose.prod.yml` instead, which pulls the published image.
 
 services:
   app:
-    image: ghcr.io/vexwave/vex-backend:${VEX_TAG:-latest}
-    # Only for `up --build` from a checkout; a deploy host pulls the image.
     build: .
     restart: unless-stopped
     env_file: .env
-    environment:
-      # Overrides `.env`: 127.0.0.1 would bind the container's own loopback and
-      # leave the published port answering nothing.
-      HOST: 0.0.0.0
     ports:
-      - "${PUBLISH_ADDR:-127.0.0.1}:${PORT:-3700}:${PORT:-3700}"
+      - "127.0.0.1:${PORT:-3700}:${PORT:-3700}"
     stop_grace_period: 10s
     healthcheck:
-      # TCP connect: no route answers without a token, and this leaves no log
-      # line. Bun probes because the slim image has no curl.
       test:
-        [
-          "CMD",
-          "bun",
-          "-e",
-          "(await Bun.connect({hostname:'127.0.0.1',port:Number(Bun.env.PORT??3700),socket:{open(){},data(){}}})).end()",
-        ]
+        ["CMD-SHELL", "curl -sS -o /dev/null http://127.0.0.1:$${PORT:-3700}/"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -94,7 +94,9 @@ app.register(s.plugin(router));
 
 const start = async () => {
   try {
-    const address = await app.listen({ host: env.HOST, port: env.PORT });
+    // Every interface, always: inside a container anything else answers
+    // nothing, and elsewhere the firewall is what decides who gets through.
+    const address = await app.listen({ host: "0.0.0.0", port: env.PORT });
     notify(events.serverStarted({ address }));
   } catch (err) {
     notify(events.listenFailed({ err }));

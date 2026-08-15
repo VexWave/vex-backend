@@ -36,6 +36,19 @@ export const events = {
     title: `listening on ${a.address}`,
   }),
 
+  schemaSynced: (a: { statements: number }) => ({
+    tone: "info",
+    tag: "SCHEMA",
+    title: `applied ${a.statements} schema change${a.statements === 1 ? "" : "s"}`,
+  }),
+
+  schemaSyncFailed: (a: { err: unknown }) => ({
+    tone: "error",
+    tag: "FATAL",
+    title: "could not apply the schema",
+    err: a.err,
+  }),
+
   serverStopping: (a: { signal: string }) => ({
     tone: "info",
     tag: "STOP",

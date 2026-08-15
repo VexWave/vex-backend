@@ -1,0 +1,25 @@
+# The published image, configured here: a deployment is this file, nothing else.
+# What each setting does: https://github.com/VexWave/vex-backend#configuration
+
+services:
+  app:
+    image: ghcr.io/vexwave/vex-backend:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgres://user:pass@host:5432/vexwave"
+      # Optional, at their defaults. Uncomment to change one.
+      # PORT: "3700"
+      # TRUST_PROXY: "false"
+      # IMAGE_CACHE_BYTES: "134217728"
+      # DISCORD_WEBHOOK_URL: ""
+    ports:
+      # To expose to the whole network, set to 0.0.0.0.
+      - "127.0.0.1:3700:3700"
+    stop_grace_period: 10s
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -sS -o /dev/null http://127.0.0.1:$${PORT:-3700}/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
