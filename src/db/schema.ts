@@ -35,7 +35,7 @@ export const artist = pgTable("artist", {
   imageHash: imageHashOf("image"),
   userId: integer("user_id")
     .notNull()
-    .references(() => user.id),
+    .references(() => user.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -50,7 +50,7 @@ export const track = pgTable("track", {
   coverHash: imageHashOf("cover"),
   userId: integer("user_id")
     .notNull()
-    .references(() => user.id),
+    .references(() => user.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -75,7 +75,7 @@ export const playlist = pgTable("playlist", {
   imageHash: imageHashOf("image"),
   userId: integer("user_id")
     .notNull()
-    .references(() => user.id),
+    .references(() => user.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -103,6 +103,9 @@ export const playlistTrack = pgTable(
   ],
 );
 
+// Every `user_id` cascades from here, and the junction tables cascade in turn,
+// so deleting a user takes their whole library with it — audio included, with
+// no undo. Only `bun run cli` deletes users; no API route does.
 export const user = pgTable("user", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   username: text("username").notNull().unique(),
@@ -117,6 +120,6 @@ export const session = pgTable("session", {
   token: text("token").notNull().unique(),
   userId: integer("user_id")
     .notNull()
-    .references(() => user.id),
+    .references(() => user.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
