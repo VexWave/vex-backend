@@ -1,13 +1,10 @@
 name: Publish image
 
-# A tag is the only thing that ships, so it is the only thing that builds by
-# itself. A manual run publishes `:main` and never `:latest`.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
 
-# Any job starts with no token scope and must ask for what it needs.
 permissions: {}
 
 jobs:
@@ -16,17 +13,11 @@ jobs:
 
     permissions:
       contents: read
-      # Pushing to GHCR under this repo's own org needs no secret beyond this.
       packages: write
 
     steps:
-      # Third-party actions are pinned to commit SHAs, not tags. A tag is mutable:
-      # whoever controls the action repo can repoint it, and that is how the
-      # tj-actions/changed-files compromise reached every workflow at once.
-      # Bump these deliberately; the trailing comment is the version.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Nothing here pushes; don't leave a usable token in .git/config.
           persist-credentials: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -40,8 +31,6 @@ jobs:
           key: bun-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-cache-${{ runner.os }}-
 
-      # The image runs the TypeScript as-is, so nothing else would catch a type
-      # error before it shipped.
       - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit
 
@@ -57,8 +46,6 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}
-          # `latest` is not a default on tag pushes — only on the default branch —
-          # so it is asked for explicitly here.
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -74,7 +61,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Records what built the image and what went into it, both verifiable
-          # with `docker buildx imagetools inspect`.
           provenance: mode=max
           sbom: true
