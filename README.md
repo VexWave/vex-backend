@@ -5,9 +5,9 @@ The server half of [VexWave](https://github.com/VexWave/vex-app).
 Bun + Fastify + ts-rest + Postgres.
 
 <p>
-  <a href="https://github.com/VexWave/vex-backend/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/VexWave/vex-backend/ci.yml?branch=main&style=flat-square&label=build"></a>
+  <a href="https://github.com/VexWave/vex-backend/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/VexWave/vex-backend/ci.yml?branch=main&label=build"></a>
   &nbsp;
-  <a href="https://github.com/VexWave/vex-backend/tags"><img alt="Latest version" src="https://img.shields.io/github/v/tag/VexWave/vex-backend?style=flat-square&label=version&color=blue"></a>
+  <a href="https://github.com/VexWave/vex-backend/tags"><img alt="Latest version" src="https://img.shields.io/github/v/tag/VexWave/vex-backend?label=version&color=blue"></a>
   &nbsp;
   <a href="https://github.com/VexWave/vex-backend/pkgs/container/vex-backend"><img alt="Image size" src="https://ghcr-badge.egpl.dev/VexWave/vex-backend/size?color=%23007ec6&tag=latest&label=image%20size"></a>
 </p>
