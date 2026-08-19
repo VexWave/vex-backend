@@ -1,6 +1,3 @@
-# The published image, configured here: a deployment is this file, nothing else.
-# What each setting does: https://github.com/VexWave/vex-backend#configuration
-
 services:
   app:
     image: ghcr.io/vexwave/vex-backend:latest
