@@ -2,8 +2,6 @@
 
 The server half of [VexWave](https://github.com/VexWave/vex-app).
 
-Bun + Fastify + ts-rest + Postgres.
-
 <p>
   <a href="https://github.com/VexWave/vex-backend/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/VexWave/vex-backend/ci.yml?branch=main&label=build"></a>
   &nbsp;
