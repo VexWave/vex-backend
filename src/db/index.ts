@@ -5,6 +5,6 @@ import { relations } from "./relations";
 
 const client = postgres(env.DATABASE_URL);
 
-// drizzle-orm v1: pass the client and the `relations` object (the v1
-// replacement for the old `schema` config) so `db.query.*` works.
 export const db = drizzle({ client, relations });
+
+export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];

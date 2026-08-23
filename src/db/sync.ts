@@ -1,9 +1,7 @@
 import { pushSchema } from "drizzle-kit/api-postgres";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from ".";
+import { db, type Transaction } from ".";
 import * as schema from "./schema";
-
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 // Arbitrary, but the same in every instance — an advisory lock is only a lock
 // if everyone asks for the same number.
