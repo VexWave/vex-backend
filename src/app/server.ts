@@ -21,15 +21,13 @@ import { deleteTrack } from "./endpoints/deleteTrack";
 import { deleteArtist } from "./endpoints/deleteArtist";
 import { editTrack } from "./endpoints/editTrack";
 import { editArtist } from "./endpoints/editArtist";
-import { getTracks } from "./endpoints/getTracks";
-import { getArtists } from "./endpoints/getArtists";
+import { getData } from "./endpoints/getData";
 import { getArtistImage } from "./endpoints/getArtistImage";
 import { getTrackImage } from "./endpoints/getTrackImage";
 import { getTrackAudio } from "./endpoints/getTrackAudio";
 import { postPlaylist } from "./endpoints/postPlaylist";
 import { editPlaylist } from "./endpoints/editPlaylist";
 import { deletePlaylist } from "./endpoints/deletePlaylist";
-import { getPlaylists } from "./endpoints/getPlaylists";
 import { getPlaylistImage } from "./endpoints/getPlaylistImage";
 
 const app = Fastify({
@@ -57,15 +55,13 @@ const router = s.router(ApiContract, {
   deleteArtist,
   editTrack,
   editArtist,
-  getTracks,
-  getArtists,
+  getData,
   getArtistImage,
   getTrackImage,
   getTrackAudio,
   postPlaylist,
   editPlaylist,
   deletePlaylist,
-  getPlaylists,
   getPlaylistImage,
 });
 

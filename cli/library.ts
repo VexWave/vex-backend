@@ -1,8 +1,4 @@
 // Read-only views of what a user owns.
-//
-// These go through `UserManager`, unlike the queries in `cli/users.ts`:
-// `listTracks`/`listArtists`/`listPlaylists` already return these rows scoped to
-// one user. Nothing here writes.
 
 import * as p from "@clack/prompts";
 import { UserManager } from "../src/userManager";
@@ -13,13 +9,12 @@ import type { UserRow } from "./users";
 const has = (url: string | undefined): string =>
   url === undefined ? "—" : "yes";
 
-async function view<Item>(
+function view<Item>(
   row: UserRow,
   noun: string,
-  load: (manager: UserManager) => Promise<Item[]>,
+  items: Item[],
   columns: Column<Item>[],
-): Promise<void> {
-  const items = await load(UserManager.forUserId(row.id));
+): void {
   if (items.length === 0) {
     p.log.info(`${row.username} has no ${noun}s.`);
     return;
@@ -30,12 +25,21 @@ async function view<Item>(
   );
 }
 
-export function viewTracks(row: UserRow): Promise<void> {
-  return view(row, "track", (manager) => manager.listTracks(), [
+export async function viewTracks(row: UserRow): Promise<void> {
+  const manager = UserManager.forUserId(row.id);
+  const [tracks, artists] = await Promise.all([
+    manager.listTracks(),
+    manager.listArtists(),
+  ]);
+  const names = new Map(artists.map((a) => [a.id, a.name] as const));
+  view(row, "track", tracks, [
     { header: "title", value: (t) => t.title, max: 44 },
     {
       header: "artists",
-      value: (t) => (t.artists.length === 0 ? "—" : t.artists.join(", ")),
+      value: (t) =>
+        t.artistIds.length === 0
+          ? "—"
+          : t.artistIds.map((id) => names.get(id) ?? "?").join(", "),
       max: 28,
     },
     { header: "length", value: (t) => duration(t.duration), right: true },
@@ -43,16 +47,16 @@ export function viewTracks(row: UserRow): Promise<void> {
   ]);
 }
 
-export function viewArtists(row: UserRow): Promise<void> {
-  return view(row, "artist", (manager) => manager.listArtists(), [
+export async function viewArtists(row: UserRow): Promise<void> {
+  view(row, "artist", await UserManager.forUserId(row.id).listArtists(), [
     { header: "id", value: (a) => String(a.id), right: true },
     { header: "name", value: (a) => a.name, max: 48 },
     { header: "image", value: (a) => has(a.imageUrl) },
   ]);
 }
 
-export function viewPlaylists(row: UserRow): Promise<void> {
-  return view(row, "playlist", (manager) => manager.listPlaylists(), [
+export async function viewPlaylists(row: UserRow): Promise<void> {
+  view(row, "playlist", await UserManager.forUserId(row.id).listPlaylists(), [
     { header: "id", value: (l) => String(l.id), right: true },
     { header: "name", value: (l) => l.name, max: 48 },
     { header: "tracks", value: (l) => String(l.trackIds.length), right: true },

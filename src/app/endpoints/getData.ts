@@ -2,15 +2,13 @@ import type { AppRouteImplementation } from "@ts-rest/fastify";
 import { UserManager } from "../../userManager";
 import { ApiContract } from "../../../contract/contract";
 
-export const getArtists: AppRouteImplementation<
-  typeof ApiContract.getArtists
+export const getData: AppRouteImplementation<
+  typeof ApiContract.getData
 > = async ({ request }) => {
   const user = await UserManager.fromRequest(request);
   if (user === null) {
     return { status: 401, body: "Unauthorized" };
   }
 
-  const artists = await user.listArtists();
-
-  return { status: 200, body: artists };
+  return { status: 200, body: await user.listData() };
 };

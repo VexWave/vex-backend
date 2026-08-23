@@ -15,15 +15,56 @@ import {
   trackImagePath,
 } from "../contract/contract";
 
-// All user-scoped data access. Every read and write is filtered by the
-// user's id, so a caller can never touch another user's rows.
+// A `*Hash` is generated from the image bytes, so it says both that an image
+// exists and which version it is, without ever reading them.
+const toTrack = (row: {
+  id: string;
+  title: string;
+  durationMs: number;
+  coverHash: string | null;
+  artists: { id: number }[];
+}) => ({
+  id: row.id,
+  title: row.title,
+  duration: row.durationMs,
+  artistIds: row.artists.map((a) => a.id),
+  coverUrl:
+    row.coverHash === null ? undefined : trackImagePath(row.id, row.coverHash),
+});
+
+const toArtist = (row: {
+  id: number;
+  name: string;
+  imageHash: string | null;
+}) => ({
+  id: row.id,
+  name: row.name,
+  imageUrl:
+    row.imageHash === null ? undefined : artistImagePath(row.id, row.imageHash),
+});
+
+const toPlaylist = (row: {
+  id: number;
+  name: string;
+  imageHash: string | null;
+  entries: { trackId: string }[];
+}) => ({
+  id: row.id,
+  name: row.name,
+  trackIds: row.entries.map((e) => e.trackId),
+  imageUrl:
+    row.imageHash === null
+      ? undefined
+      : playlistImagePath(row.id, row.imageHash),
+});
+
+// Every read and write here is filtered by `userId`, so a caller can never
+// touch another user's rows.
 export class UserManager {
   private constructor(readonly userId: number) {}
 
-  // Resolve the requesting user; null = unauthorized. The `requireAuth` hook
-  // has already resolved the token in `onRequest` and left the id on the
-  // request, so the common path costs no query at all; the fallback covers
-  // routes the gate lets through without a lookup.
+  // `requireAuth` already left the resolved id on the request, so the common
+  // path costs no query; the fallback covers routes the gate lets through.
   static async fromRequest(
     request: FastifyRequest,
   ): Promise<UserManager | null> {
@@ -33,11 +74,47 @@ export class UserManager {
     return userId === null ? null : new UserManager(userId);
   }
 
-  // Acts as a given user, for operator tooling (`cli/`) with no request to
-  // authenticate. Still scoped to `userId`; what's missing is only the proof
-  // the caller owns that id — so nothing serving HTTP may use this.
+  // For `cli/` only: scoped to `userId`, but with no proof the caller owns it,
+  // so nothing serving HTTP may use this.
   static forUserId(userId: number): UserManager {
     return new UserManager(userId);
+  }
+
+  // --- Library ---
+
+  // One statement, so Postgres evaluates it against a single snapshot and
+  // `artistIds` / `trackIds` resolve against the rows sent beside them.
+  async listData() {
+    const row = await db.query.user.findFirst({
+      columns: { id: true },
+      where: { id: this.userId },
+      with: {
+        tracks: {
+          columns: { id: true, title: true, durationMs: true, coverHash: true },
+          with: { artists: { columns: { id: true }, orderBy: { id: "asc" } } },
+          orderBy: { createdAt: "asc", id: "asc" },
+        },
+        artists: {
+          columns: { id: true, name: true, imageHash: true },
+          orderBy: { id: "asc" },
+        },
+        playlists: {
+          columns: { id: true, name: true, imageHash: true },
+          with: {
+            entries: {
+              columns: { trackId: true },
+              orderBy: { position: "asc" },
+            },
+          },
+          orderBy: { id: "asc" },
+        },
+      },
+    });
+    return {
+      tracks: row?.tracks.map(toTrack) ?? [],
+      artists: row?.artists.map(toArtist) ?? [],
+      playlists: row?.playlists.map(toPlaylist) ?? [],
+    };
   }
 
   // --- Tracks ---
@@ -115,7 +192,6 @@ export class UserManager {
         await tx.update(track).set(values).where(this.ownTrack(id));
       }
       if (artistIds !== undefined) {
-        // Full replacement of the track's artist links
         await tx.delete(artistToTrack).where(eq(artistToTrack.trackId, id));
         if (artistIds.length > 0) {
           await tx
@@ -127,7 +203,6 @@ export class UserManager {
     return "updated";
   }
 
-  // Returns false when the track doesn't exist or belongs to another user.
   async deleteTrack(id: string): Promise<boolean> {
     const deleted = await db
       .delete(track)
@@ -136,46 +211,30 @@ export class UserManager {
     return deleted.length > 0;
   }
 
-  // Tracks in the shape the contract's TrackResponse expects. `coverUrl` points
-  // at the getTrackImage route when the track has a cover, and pins the version
-  // of the bytes it points at so the client can cache them for good; the
-  // (potentially large) cover bytes are never loaded here — `coverHash` is
-  // generated from them, and is null exactly when there is no cover.
-  //
-  // Ordered by `createdAt` because the contract promises oldest first and a
-  // uuid id sorts arbitrarily — the client derives "newest uploads" from this
-  // order alone.
+  // Oldest first: a uuid sorts arbitrarily. The junction stores no position,
+  // so `artistIds` is not the order the track was created with.
   async listTracks(): Promise<
     {
       id: string;
       title: string;
       duration: number;
-      artists: string[];
+      artistIds: number[];
       coverUrl?: string;
     }[]
   > {
     const rows = await db.query.track.findMany({
       columns: { id: true, title: true, durationMs: true, coverHash: true },
       where: { userId: this.userId },
-      with: { artists: { columns: { name: true } } },
-      orderBy: { createdAt: "asc" },
+      // Stable order; the junction's PK gives none.
+      with: { artists: { columns: { id: true }, orderBy: { id: "asc" } } },
+      // `createdAt` is transaction time, so it ties; `id` makes the sort total.
+      orderBy: { createdAt: "asc", id: "asc" },
     });
-    return rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      duration: row.durationMs,
-      artists: row.artists.map((a) => a.name),
-      coverUrl:
-        row.coverHash === null
-          ? undefined
-          : trackImagePath(row.id, row.coverHash),
-    }));
+    return rows.map(toTrack);
   }
 
-  // Size of a track's stored audio in bytes, or null when the track doesn't
-  // exist or belongs to another user. `octet_length` is evaluated in Postgres,
-  // so answering a `Range` request costs nothing until the bytes are asked for
-  // — and an unsatisfiable range costs nothing at all.
+  // `octet_length` runs in Postgres, so answering a `Range` request never
+  // loads the audio.
   async getTrackAudioSize(id: string): Promise<number | null> {
     const row = await db.query.track.findFirst({
       columns: { id: true },
@@ -187,12 +246,7 @@ export class UserManager {
     return row?.size ?? null;
   }
 
-  // A slice of a track's stored audio: `length` bytes from the zero-based
-  // offset `start`, or null when the track doesn't exist or belongs to another
-  // user. Postgres' `substring` does the slicing, so serving a seek costs the
-  // size of the slice instead of the size of the track — the difference
-  // between a handful of kilobytes and a hundred megabytes per request, every
-  // time a client seeks.
+  // `substring` runs in Postgres, so a seek costs the slice, not the track.
   async getTrackAudioRange(
     id: string,
     start: number,
@@ -223,12 +277,6 @@ export class UserManager {
     return created?.id ?? null;
   }
 
-  // Artists in the shape the contract's ArtistResponse expects. `imageUrl`
-  // points at the getArtistImage route when the artist has an image, and pins
-  // the version of the bytes it points at so the client can cache them for
-  // good; the (potentially large) image bytes are never loaded here —
-  // `imageHash` is generated from them, and is null exactly when there is no
-  // image.
   async listArtists(): Promise<
     { id: number; name: string; imageUrl?: string }[]
   > {
@@ -237,19 +285,10 @@ export class UserManager {
       where: { userId: this.userId },
       orderBy: { id: "asc" },
     });
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      imageUrl:
-        row.imageHash === null
-          ? undefined
-          : artistImagePath(row.id, row.imageHash),
-    }));
+    return rows.map(toArtist);
   }
 
-  // Updates an artist's name and/or avatar image (`image: null` removes it).
-  // The ownership filter is part of the WHERE clause, so another user's artist
-  // is treated as not found.
+  // `image: null` removes it; `undefined` leaves it unchanged.
   async updateArtist(
     id: number,
     changes: { name?: string; image?: Buffer | null },
@@ -270,8 +309,7 @@ export class UserManager {
     return updated.length > 0 ? "updated" : "not_found";
   }
 
-  // Unlinks the artist from its tracks (via ON DELETE CASCADE); the tracks
-  // themselves are kept. Returns false when not found or owned by another user.
+  // The artist's tracks are kept; only the links cascade away.
   async deleteArtist(id: number): Promise<boolean> {
     const deleted = await db
       .delete(artist)
@@ -315,9 +353,8 @@ export class UserManager {
 
   async updatePlaylist(
     id: number,
-    // `image: null` removes the cover; `undefined` leaves a field unchanged.
-    // `trackIds` fully replaces the ordered track list (an empty array
-    // clears it).
+    // `image: null` removes the cover; `trackIds` fully replaces the ordered
+    // list, an empty array clearing it.
     changes: {
       name?: string;
       image?: Buffer | null;
@@ -348,7 +385,6 @@ export class UserManager {
         await tx.update(playlist).set(values).where(this.ownPlaylist(id));
       }
       if (trackIds !== undefined) {
-        // Full replacement of the ordered track list
         await tx.delete(playlistTrack).where(eq(playlistTrack.playlistId, id));
         if (trackIds.length > 0) {
           await tx.insert(playlistTrack).values(
@@ -364,8 +400,7 @@ export class UserManager {
     return "updated";
   }
 
-  // Removes the playlist and (via ON DELETE CASCADE) its entries; the tracks
-  // themselves are kept. Returns false when not found or owned by another user.
+  // The playlist's tracks are kept; only its entries cascade away.
   async deletePlaylist(id: number): Promise<boolean> {
     const deleted = await db
       .delete(playlist)
@@ -374,13 +409,8 @@ export class UserManager {
     return deleted.length > 0;
   }
 
-  // Playlists in the shape the contract's PlaylistResponse expects, each with
-  // its complete ordered `trackIds` (deleted tracks are cascaded out of the
-  // entries table, so dangling ids can't appear). `imageUrl` points at the
-  // getPlaylistImage route when the playlist has a cover, and pins the version
-  // of the bytes it points at so the client can cache them for good; the
-  // (potentially large) image bytes are never loaded here — `imageHash` is
-  // generated from them, and is null exactly when there is no cover.
+  // Deleted tracks cascade out of the entries table, so `trackIds` never
+  // dangles.
   async listPlaylists(): Promise<
     {
       id: number;
@@ -397,21 +427,11 @@ export class UserManager {
       },
       orderBy: { id: "asc" },
     });
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      trackIds: row.entries.map((entry) => entry.trackId),
-      imageUrl:
-        row.imageHash === null
-          ? undefined
-          : playlistImagePath(row.id, row.imageHash),
-    }));
+    return rows.map(toPlaylist);
   }
 
   // --- Ownership helpers ---
 
-  // SQL filter matching a track only when it belongs to this user, so writes
-  // enforce ownership themselves instead of trusting an earlier check.
   private ownTrack(id: string) {
     return and(eq(track.id, id), eq(track.userId, this.userId));
   }
@@ -435,8 +455,6 @@ export class UserManager {
     return owned.length === ids.length;
   }
 
-  // SQL filter matching a playlist only when it belongs to this user, so writes
-  // enforce ownership themselves instead of trusting an earlier check.
   private ownPlaylist(id: number) {
     return and(eq(playlist.id, id), eq(playlist.userId, this.userId));
   }
@@ -449,8 +467,7 @@ export class UserManager {
     return row !== undefined;
   }
 
-  // Callers pass duplicate-free ids (the contract rejects duplicate playlist
-  // track ids), so a plain count comparison suffices.
+  // The contract rejects duplicate ids, so a count comparison suffices.
   private async ownsAllTracks(ids: string[]): Promise<boolean> {
     if (ids.length === 0) {
       return true;
