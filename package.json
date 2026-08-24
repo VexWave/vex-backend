@@ -8,6 +8,7 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "cli": "bun cli/index.ts",
+    "health": "bun src/healthcheck.ts",
     "release": "bun scripts/release.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

@@ -1,9 +1,5 @@
 FROM oven/bun:1.4-slim
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl \
-  && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -14,5 +10,8 @@ COPY . .
 USER bun
 
 EXPOSE 3700
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+  CMD ["bun", "src/healthcheck.ts"]
 
 CMD ["bun", "src/index.ts"]

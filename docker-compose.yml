@@ -1,5 +1,4 @@
-# Builds this checkout, configured by `.env` (see `.env.example`). Deployments
-# use `docker-compose.prod.yml` instead, which pulls the published image.
+# Builds this checkout, configured by `.env` (see `.env.example`).
 
 services:
   app:
@@ -8,11 +7,3 @@ services:
     env_file: .env
     ports:
       - "127.0.0.1:${PORT:-3700}:${PORT:-3700}"
-    stop_grace_period: 10s
-    healthcheck:
-      test:
-        ["CMD-SHELL", "curl -sS -o /dev/null http://127.0.0.1:$${PORT:-3700}/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s

@@ -33,6 +33,8 @@ declare module "fastify" {
      * where it is caught.
      */
     logError?: Error;
+    /** Set by a route that should leave no request line */
+    quiet?: true;
   }
 }
 
@@ -283,6 +285,12 @@ export function handleUncaughtError(
  * measured at all.
  */
 export const logRequests: onResponseHookHandler = async (request, reply) => {
+  // A probe on a timer would otherwise leave a line, and page Discord on a
+  // 503, every interval.
+  if (request.quiet === true) {
+    return;
+  }
+
   const status = reply.statusCode;
   // The registered route pattern when one matched (`/artist/:id/image`), which
   // keeps a route's lines identical whatever ids they carry. A 404 has no

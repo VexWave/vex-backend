@@ -12,11 +12,3 @@ services:
     ports:
       # To expose to the whole network, set to 0.0.0.0.
       - "127.0.0.1:3700:3700"
-    stop_grace_period: 10s
-    healthcheck:
-      test:
-        ["CMD-SHELL", "curl -sS -o /dev/null http://127.0.0.1:$${PORT:-3700}/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s

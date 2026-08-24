@@ -38,6 +38,7 @@ docker compose exec app bun run cli     # create the first account
 | `docker compose logs -f app`                  | Follow the request log          |
 | `docker compose exec app bun run cli`         | Admin CLI on the running server |
 | `docker compose pull && docker compose up -d` | Update to the latest image      |
+| `docker compose exec app bun run health`      | Check health                    |
 
 ## Configuration
 
@@ -56,6 +57,7 @@ docker compose exec app bun run cli     # create the first account
 | `bun run dev`       | Run with `--watch`                                             |
 | `bun run start`     | Run once                                                       |
 | `bun run cli`       | Admin CLI for users and sessions                               |
+| `bun run health`    | Probe a running server, and say what is wrong                  |
 | `bun run release`   | Tag a version, which publishes the image                       |
 | `bun run db:push`   | Apply `src/db/schema.ts` by hand; the server does this at boot |
 | `bun run db:studio` | Drizzle Studio                                                 |

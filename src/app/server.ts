@@ -14,6 +14,7 @@ import {
   securityHeaders,
   SMALL_BODY_LIMIT,
 } from "./hooks";
+import { registerHealth } from "./health";
 import { login } from "./endpoints/login";
 import { postArtist } from "./endpoints/postArtist";
 import { postTrack } from "./endpoints/postTrack";
@@ -75,6 +76,7 @@ app.setErrorHandler(handleUncaughtError);
 // leaves what it caught in the other for the log line to print.
 app.decorateRequest("userId", undefined);
 app.decorateRequest("logError", undefined);
+app.decorateRequest("quiet", undefined);
 
 // Hooks have to be in place before the routes are registered — `onRoute` fires
 // as each route is added, and the rest are copied into the plugin's context at
@@ -85,6 +87,8 @@ app.addHook("onRequest", rateLimit);
 app.addHook("onRequest", requireAuth);
 app.addHook("onSend", cacheHeaders);
 app.addHook("onResponse", logRequests);
+
+registerHealth(app);
 
 app.register(s.plugin(router));
 
