@@ -30,7 +30,7 @@ bun run cli
 curl -o docker-compose.yml https://raw.githubusercontent.com/VexWave/vex-backend/main/docker-compose.prod.yml
 nano docker-compose.yml                 # configuration
 docker compose up -d
-docker compose exec app bun run cli        # create the first account
+docker compose exec app bun run cli     # create the first account
 ```
 
 | Command                                       | What it does                    |
