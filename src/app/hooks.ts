@@ -88,6 +88,18 @@ export const limitRouteBodies: onRouteHookHandler = (routeOptions) => {
     body === undefined ? SMALL_BODY_LIMIT : MEDIA_BODY_LIMITS[body];
 };
 
+export const compressJsonOnly: onRouteHookHandler = (routeOptions) => {
+  const ok = routeOf(routeOptions.config)?.responses[200];
+  // Zod schema -> serialized to JSON; `c.type<T>()` -> opaque bytes. Anything
+  // off-contract (the health route, 404s) answers with JSON like the rest.
+  const servesBytes =
+    ok !== undefined &&
+    typeof (ok as { safeParse?: unknown }).safeParse !== "function";
+  if (servesBytes) {
+    routeOptions.compress = false;
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Rate limiting
 // ---------------------------------------------------------------------------

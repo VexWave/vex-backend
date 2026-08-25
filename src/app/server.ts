@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import compress from "@fastify/compress";
 import { initServer } from "@ts-rest/fastify";
 import { ApiContract } from "../../contract/contract";
 import { flush } from "../discord";
@@ -6,6 +7,7 @@ import { env } from "../env";
 import { events, notify } from "../events";
 import {
   cacheHeaders,
+  compressJsonOnly,
   handleUncaughtError,
   limitRouteBodies,
   logRequests,
@@ -82,6 +84,7 @@ app.decorateRequest("quiet", undefined);
 // as each route is added, and the rest are copied into the plugin's context at
 // registration time.
 app.addHook("onRoute", limitRouteBodies);
+app.addHook("onRoute", compressJsonOnly);
 app.addHook("onRequest", securityHeaders);
 app.addHook("onRequest", rateLimit);
 app.addHook("onRequest", requireAuth);
@@ -89,6 +92,9 @@ app.addHook("onSend", cacheHeaders);
 app.addHook("onResponse", logRequests);
 
 registerHealth(app);
+
+// Must precede the router: `onRoute` only fires for routes added after it.
+app.register(compress, { globalDecompression: false });
 
 app.register(s.plugin(router));
 
