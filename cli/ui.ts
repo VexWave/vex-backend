@@ -1,7 +1,7 @@
 // Shared presentation for the admin CLI: the prompt wrapper every prompt goes
 // through, table rendering, and the value formatters the views share.
 
-import { isCancel, unicodeOr } from "@clack/prompts";
+import { isCancel, unicodeOr, type CANCEL_SYMBOL } from "@clack/prompts";
 import { clean } from "../src/logger";
 
 /** Ctrl-C at a prompt. Caught only in `cli/index.ts`, which closes the pool. */
@@ -16,7 +16,9 @@ export class Cancelled extends Error {
  * Unwraps a prompt, turning clack's cancel symbol into a {@link Cancelled}.
  * Wrap every prompt in this so no caller has to carry a "cancelled" case.
  */
-export async function ask<T>(answer: Promise<T | symbol>): Promise<T> {
+export async function ask<T>(
+  answer: Promise<T | typeof CANCEL_SYMBOL>,
+): Promise<T> {
   const value = await answer;
   if (isCancel(value)) {
     throw new Cancelled();

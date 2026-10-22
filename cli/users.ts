@@ -36,7 +36,8 @@ export async function findUser(id: number): Promise<UserRow | undefined> {
 async function queryUsers(where?: { id: number }): Promise<UserRow[]> {
   const rows = await db.query.user.findMany({
     columns: { id: true, username: true, createdAt: true },
-    where,
+    // drizzle rc.5 throws on `where: undefined`.
+    where: where ?? {},
     // The casts are load-bearing: postgres.js returns int8 (`count`) and numeric
     // (`sum`) as strings, and float8 as a number. `octet_length` gets a track's
     // size without reading the track.
