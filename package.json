@@ -25,7 +25,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@clack/prompts": "^1.8.1",
+    "@clack/prompts": "^1.9.0",
     "@fastify/compress": "^9.3.0",
     "@ts-rest/core": "3.53.0-rc.1",
     "@ts-rest/fastify": "3.53.0-rc.1",
